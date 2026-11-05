@@ -1,0 +1,19 @@
+{
+  "name": "@dashrush/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file=.env src/index.ts",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@dashrush/shared": "workspace:*",
+    "@hono/node-server": "^1.13.7",
+    "hono": "^4.6.14",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.2"
+  }
+}

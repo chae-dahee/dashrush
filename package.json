@@ -1,0 +1,13 @@
+{
+  "name": "dashrush",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:server": "pnpm --filter @dashrush/server dev",
+    "dev:web": "pnpm --filter @dashrush/web dev",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}
