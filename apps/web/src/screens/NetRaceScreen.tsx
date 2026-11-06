@@ -43,7 +43,6 @@ export function NetRaceScreen({ room, meId, onLeave }: Props) {
       players: room.players,
       raceStartsAt: room.raceStartsAt!,
       onHud: setHud,
-      // 시간은 매 프레임 바뀌므로 React state 대신 DOM을 직접 갱신한다.
       onTime: (ms, limitLeft) => {
         if (timeRef.current) timeRef.current.textContent = formatMs(ms);
         if (limitRef.current) limitRef.current.textContent = limitLeft === null ? '' : `제한 ${Math.ceil(limitLeft / 1000)}초`;

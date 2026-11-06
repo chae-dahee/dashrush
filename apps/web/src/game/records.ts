@@ -17,7 +17,6 @@ function load(mapId: string): Best {
   return { race: {}, lap: null };
 }
 
-// 기록을 반영하고 무엇을 갱신했는지 돌려준다.
 export function submitRecord(mapId: string, laps: number, raceMs: number | null, lapMs: number | null) {
   const best = load(mapId);
   const prevRace = best.race[laps];

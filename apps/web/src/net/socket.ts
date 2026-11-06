@@ -5,7 +5,6 @@ export type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 let socket: GameSocket | null = null;
 
-// 화면 전환마다 연결을 새로 만들지 않도록 앱 전체에서 하나만 쓴다.
 export function getSocket(): GameSocket {
   socket ??= io({ autoConnect: false });
   return socket;

@@ -60,7 +60,7 @@ export class TickClock {
 
 const WRONG_WAY_ANGLE = (120 * Math.PI) / 180;
 const WRONG_WAY_MIN_SPEED = 2; // 타일/초
-const WRONG_WAY_SEC = 1; // 충돌로 잠깐 돌았을 때 깜빡이지 않도록 이만큼 이어져야 표시한다.
+const WRONG_WAY_SEC = 1;
 
 // 화면 표시용 역주행 판정이다. 서버 판정에는 영향이 없다.
 export class WrongWay {
@@ -179,7 +179,6 @@ export class RaceView {
   private followCamera(me: ViewKart, dtSec: number) {
     const boostFov = me.boostLeft > 0 ? CAM.boostFov : 0;
     if (this.view === 'third') {
-      // 카메라 방향이 차체를 늦게 따라가게 해, 드리프트 때 차체가 옆으로 미끄러지는 모습이 보이게 한다.
       const follow = me.drifting ? CAM.driftYawFollow : CAM.yawFollow;
       this.camYaw ??= me.angle;
       this.camYaw += wrapAngle(me.angle - this.camYaw) * (1 - Math.exp(-follow * dtSec));

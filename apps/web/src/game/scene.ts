@@ -73,7 +73,6 @@ export function drawFloorCanvas(map: MapData, px: number): HTMLCanvasElement {
     }
   }
 
-  // 결승선 체커
   const f = map.checkpoints[0];
   const len = Math.hypot(f.b.x - f.a.x, f.b.y - f.a.y);
   ctx.save();
@@ -137,7 +136,7 @@ export function buildTrack(map: MapData, renderer: THREE.WebGLRenderer): THREE.G
   floor.position.set(map.width / 2, 0, map.height / 2);
   group.add(floor);
 
-  // 벽 타일은 같은 상자를 인스턴스 하나로 묶어 그리기 호출을 한 번으로 줄인다.
+  // 벽 타일은 InstancedMesh 하나로 그리므로 모두 같은 상자 모양이어야 한다.
   const walls: [number, number][] = [];
   for (let y = 0; y < map.height; y++) {
     for (let x = 0; x < map.width; x++) if (surfaceAt(map, x, y) === 'wall') walls.push([x, y]);
@@ -267,7 +266,6 @@ export class KartModel {
   }
 }
 
-// 다른 카트 위에 띄우는 닉네임 라벨이다.
 function nameLabel(text: string): THREE.Sprite {
   const canvas = document.createElement('canvas');
   canvas.width = 256;
