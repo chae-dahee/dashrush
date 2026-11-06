@@ -28,17 +28,28 @@ export const GRIP = 10;
 export const DRIFT_TURN_MUL = 1.35;
 export const DRIFT_GRIP_MUL = 0.25;
 export const DRIFT_MIN_SPEED = 3;
-export const DRIFT_SLIP_MIN = 1; // 측면 속력이 이보다 클 때만 드리프트 게이지가 쌓인다(타일/초).
-// 드리프트 게이지 단계이다. 오래 충전할수록 부스트가 길고, 드리프트를 푸는 순간 앞쪽 속도가 더 크게 뛴다.
-export const DRIFT_TIERS = [
-  { charge: 0.6, boostSec: 0.8, kick: 2 },
-  { charge: 1.4, boostSec: 1.3, kick: 3 },
-  { charge: 2.2, boostSec: 1.8, kick: 4 },
-] as const;
+export const DRIFT_SLIP_MIN = 1; // 측면 속력이 이보다 클 때만 미끄러지는 것으로 본다(타일/초).
+export const DRIFT_END_MIN_SEC = 0.4; // 이만큼 미끄러진 드리프트를 끝내면 작은 부스트를 얻는다.
+export const DRIFT_END_BOOST_SEC = 0.4;
 export const BOOST_MUL = 1.4;
-export const BOOST_SEC = 1.2;
+export const BOOST_SEC = 1.2; // 부스트 패드
+
+// 부스트 게이지(%)는 버리지 않고 쌓이며, 부스트를 쓸 때만 줄어든다.
+export const GAUGE_MAX = 100;
+export const GAUGE_DRIFT_RATE = 25; // 미끄러지는 동안 초당 충전량
+export const GAUGE_CLEAN_RATE = 3; // 부딪히지 않고 빠르게 달리는 동안 초당 충전량
+export const GAUGE_CLEAN_SPEED = 0.6; // 최고 속도 대비 이 비율 이상이어야 빠르게 달리는 것으로 본다.
+export const GAUGE_CLEAN_DELAY_SEC = 2; // 부딪힌 뒤 이 시간이 지나야 다시 찬다.
+export const BOOST_USE_COST = 25;
+export const BOOST_USE_SEC = 1.5;
 export const WALL_BOUNCE = 0.3;
 export const WALL_SPEED_KEEP = 0.6;
+export const WALL_IMPACT_MIN = 2; // 벽으로 들어오던 속력이 이보다 클 때만 감속하고 충돌로 친다(타일/초).
+export const WALL_MIN_BOUNCE = 2; // 벽을 민 뒤 바깥으로 튕겨 나가는 최소 속력(타일/초)
+export const WALL_SCRAPE_MAX = 0.5; // 이보다 약하게 미는 것은 벽을 스치는 것으로 보고 튕기지 않는다(타일/초).
+export const WALL_TURN_MAX = 0.35; // 벽을 밀 때마다 벽을 따라가는 쪽으로 틀어 주는 최대 각도(라디안)
+export const FALL_SEC = 1.5;
+export const SPAWN_GHOST_SEC = 1.5;
 
 export const MAX_PLAYERS = 8;
 export const LAPS_MIN = 1;
@@ -62,7 +73,8 @@ export const EVENT_RATE_MAX = TICK_RATE * 2; // 소켓 하나가 1초에 보낼 
 export const CORRECTION_SNAP = 3; // 예측 보정 차이가 이 거리(타일)를 넘으면 오프셋 없이 바로 맞춘다.
 
 export const DISCONNECT_GRACE_MS = 15000;
-export const QUICK_START_MS = 20000; // 공개 방에 2명이 모이면 도는 시작 타이머
+export const QUICK_START_MS = 20000; // 공개 방에서 첫 준비 뒤 이 시간이 지나면 준비하지 않은 사람이 있어도 출발한다.
+export const QUICK_SIZE_MIN = 2;
 export const TEAM_SIZE_MAX = MAX_PLAYERS / 2;
 export const TEAM_POINTS = [10, 8, 6, 5, 4, 3, 2, 1]; // 개인 순위별 점수이며 DNF는 0점이다.
 // 팀 안에서는 명도로 구분한다.

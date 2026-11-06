@@ -1,4 +1,4 @@
-import { INPUT_ACCEL, INPUT_BRAKE, INPUT_DRIFT, INPUT_LEFT, INPUT_RIGHT } from '@dashrush/shared';
+import { INPUT_ACCEL, INPUT_BOOST, INPUT_BRAKE, INPUT_DRIFT, INPUT_LEFT, INPUT_RIGHT } from '@dashrush/shared';
 
 const KEY_BITS: Record<string, number> = {
   ArrowUp: INPUT_ACCEL,
@@ -9,7 +9,7 @@ const KEY_BITS: Record<string, number> = {
   KeyA: INPUT_LEFT,
   ArrowRight: INPUT_RIGHT,
   KeyD: INPUT_RIGHT,
-  Space: INPUT_DRIFT,
+  Space: INPUT_BOOST,
   ShiftLeft: INPUT_DRIFT,
   ShiftRight: INPUT_DRIFT,
 };

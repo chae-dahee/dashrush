@@ -48,7 +48,7 @@ interface Options {
   raceStartsAt: number; // 서버 시각
   onHud: (hud: NetHud) => void;
   onTime: (raceMs: number, limitLeftMs: number | null) => void;
-  onGauge: (g: { drifting: boolean; driftCharge: number; boostLeft: number }) => void;
+  onGauge: (g: { gauge: number; boostLeft: number }) => void;
   onWrongWay: (wrongWay: boolean) => void;
   onCountdown: (text: string | null) => void;
   onView: (view: ViewMode) => void;
@@ -155,11 +155,16 @@ export class NetRace {
       vx: s.vx,
       vy: s.vy,
       drifting: s.drifting,
-      driftCharge: s.driftCharge,
+      driftSlip: s.driftSlip,
+      gauge: s.gauge,
+      sinceHit: s.sinceHit,
+      boostHeld: s.boostHeld,
       boostLeft: s.boostLeft,
       lap: s.lap,
       cp: s.checkpoint,
       finished: s.lap >= this.opts.laps,
+      fallLeft: s.fallLeft,
+      spawnLeft: s.spawnLeft,
     };
     for (const i of this.pending) k = stepKart(k, i.bits, this.opts.map, this.opts.laps).kart;
 
@@ -198,7 +203,7 @@ export class NetRace {
     const hit = this.view.draw(karts, this.opts.meId, dtSec, now);
     const me = karts.find((k) => k.id === this.opts.meId)!;
     this.sound.frame(me, hit);
-    this.opts.onGauge(me);
+    this.opts.onGauge(this.pred);
     const wrongWay = this.wrongWay.update(this.opts.map, this.pred, dtSec);
     if (wrongWay !== this.wasWrongWay) this.opts.onWrongWay((this.wasWrongWay = wrongWay));
     this.sound.otherEngines(
@@ -229,20 +234,22 @@ export class NetRace {
       y: a.y + (b.y - a.y) * alpha + this.offset.y,
       angle: a.angle + wrapAngle(b.angle - a.angle) * alpha + this.offset.angle,
       drifting: b.drifting,
-      driftCharge: b.driftCharge,
+      driftSlip: b.driftSlip,
       boostLeft: b.boostLeft,
       speed: Math.hypot(b.vx, b.vy),
       ghost: false,
+      fallLeft: b.fallLeft,
+      spawnLeft: b.spawnLeft,
     };
   }
 
   // renderAt을 사이에 두는 두 스냅샷을 보간한다. 다음 스냅샷이 없으면 마지막 속도로 잠시 외삽한다.
   private sample(p: PlayerInfo, renderAt: number): ViewKart {
-    const base = { id: p.id, color: p.color, driftCharge: 0, label: p.nickname };
+    const base = { id: p.id, color: p.color, label: p.nickname };
     const frames = this.frames.filter((f) => f.karts.has(p.id));
     if (frames.length === 0) {
       const k = createKart(this.opts.map.grid[p.gridSlot]);
-      return { ...base, x: k.x, y: k.y, angle: k.angle, drifting: false, boostLeft: 0, speed: 0, ghost: !p.connected };
+      return { ...base, x: k.x, y: k.y, angle: k.angle, drifting: false, driftSlip: 0, boostLeft: 0, speed: 0, ghost: !p.connected, fallLeft: 0, spawnLeft: 0 };
     }
 
     let i = frames.length - 1;
@@ -258,9 +265,12 @@ export class NetRace {
         y: a.y + (b.y - a.y) * u,
         angle: a.angle + wrapAngle(b.angle - a.angle) * u,
         drifting: b.drifting,
+        driftSlip: b.driftSlip,
         boostLeft: b.boostLeft,
         speed: Math.hypot(b.vx, b.vy),
         ghost: b.ghost,
+        fallLeft: b.fallLeft,
+        spawnLeft: b.spawnLeft,
       };
     }
     const ahead = Math.min(Math.max(renderAt - frames[i].t, 0), EXTRAPOLATE_MAX_MS) / 1000;
@@ -270,9 +280,12 @@ export class NetRace {
       y: a.y + a.vy * ahead,
       angle: a.angle,
       drifting: a.drifting,
+      driftSlip: a.driftSlip,
       boostLeft: a.boostLeft,
       speed: Math.hypot(a.vx, a.vy),
       ghost: a.ghost,
+      fallLeft: a.fallLeft,
+      spawnLeft: a.spawnLeft,
     };
   }
 

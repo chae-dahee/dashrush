@@ -1,0 +1,578 @@
+/* UI 색은 아래 네 가지만 쓴다. 카트 색과 팀 색은 참가자를 구분하는 게임 정보라 예외이다. */
+:root {
+  --ink: #2b2340;
+  --sun: #ffc83d;
+  --sky: #9fdcff;
+  --paper: #ffffff;
+  --font: system-ui, -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--sky);
+  color: var(--ink);
+  font-family: var(--font);
+  font-weight: 700;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+.page {
+  min-height: 100vh;
+  padding: 24px 16px 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.page.center {
+  justify-content: center;
+  padding-bottom: 24px;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.topbar {
+  width: min(100%, 960px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.logo {
+  font-size: clamp(44px, 12vw, 72px);
+  font-weight: 900;
+  color: var(--sun);
+  text-shadow:
+    3px 0 var(--ink),
+    -3px 0 var(--ink),
+    0 3px var(--ink),
+    0 -3px var(--ink),
+    2px 2px var(--ink),
+    -2px 2px var(--ink),
+    2px -2px var(--ink),
+    -2px -2px var(--ink),
+    0 8px 0 var(--ink);
+  transform: rotate(-4deg);
+  letter-spacing: -1px;
+}
+
+.logo.small {
+  font-size: 32px;
+  text-shadow:
+    2px 0 var(--ink),
+    -2px 0 var(--ink),
+    0 2px var(--ink),
+    0 -2px var(--ink),
+    1px 1px var(--ink),
+    -1px 1px var(--ink),
+    1px -1px var(--ink),
+    -1px -1px var(--ink),
+    0 5px 0 var(--ink);
+}
+
+.title {
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.muted {
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+.card {
+  background: var(--paper);
+  border: 4px solid var(--ink);
+  border-radius: 24px;
+  box-shadow: 0 6px 0 var(--ink);
+  padding: 20px;
+  width: min(100%, 420px);
+}
+
+.card.wide {
+  width: min(100%, 960px);
+}
+
+.grid {
+  width: min(100%, 960px);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 20px;
+}
+
+.grid > .card {
+  width: 100%;
+}
+
+.btn {
+  padding: 10px 20px;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: var(--paper);
+  box-shadow: 0 4px 0 var(--ink);
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.05s;
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 var(--ink);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.btn.primary {
+  background: var(--sun);
+}
+
+.btn.big {
+  width: 100%;
+  padding: 14px 24px;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.btn.small {
+  padding: 6px 14px;
+  font-size: 14px;
+}
+
+.input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 3px solid var(--ink);
+  border-radius: 16px;
+  background: var(--paper);
+  font-size: 20px;
+  font-weight: 800;
+  outline: none;
+}
+
+.input:focus {
+  box-shadow: 0 0 0 4px var(--sun);
+}
+
+.input.code {
+  text-align: center;
+  letter-spacing: 6px;
+  text-transform: uppercase;
+}
+
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pill {
+  padding: 6px 14px;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: var(--paper);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.pill.on {
+  background: var(--sun);
+}
+
+.pill:disabled {
+  cursor: default;
+}
+
+.pill:disabled:not(.on) {
+  opacity: 0.45;
+}
+
+.bubble {
+  position: relative;
+  margin-top: 8px;
+  padding: 10px 14px;
+  border: 3px solid var(--ink);
+  border-radius: 16px;
+  background: var(--paper);
+}
+
+.bubble::before {
+  content: '';
+  position: absolute;
+  top: -9px;
+  left: 24px;
+  width: 14px;
+  height: 14px;
+  background: inherit;
+  border-left: 3px solid var(--ink);
+  border-top: 3px solid var(--ink);
+  transform: rotate(45deg);
+}
+
+.bubble.warn {
+  background: var(--sun);
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.badge.sun {
+  background: var(--sun);
+}
+
+.badge.ink {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+button.badge {
+  cursor: pointer;
+}
+
+.menu {
+  position: relative;
+}
+
+.menu .bubble {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 10;
+  white-space: nowrap;
+}
+
+.menu .bubble::before {
+  left: 12px;
+}
+
+.chip {
+  display: inline-block;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 3px solid var(--ink);
+  border-radius: 50%;
+}
+
+.ping.warn {
+  background: var(--sun);
+}
+
+.ping.bad {
+  background: var(--ink);
+  color: var(--sun);
+}
+
+.map-preview {
+  width: 100%;
+  border: 3px solid var(--ink);
+  border-radius: 14px;
+  display: block;
+}
+
+.map-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.map-card {
+  padding: 10px;
+  border: 3px solid var(--ink);
+  border-radius: 18px;
+  background: var(--paper);
+  box-shadow: 0 4px 0 var(--ink);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-weight: 900;
+}
+
+.map-card:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 var(--ink);
+}
+
+.players {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border: 3px solid var(--ink);
+  border-radius: 16px;
+}
+
+.player.me {
+  background: var(--sun);
+}
+
+.player .name {
+  flex: 1;
+  min-width: 80px;
+}
+
+.teams {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.actionbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  background: var(--paper);
+  border-top: 4px solid var(--ink);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.actionbar .bubble {
+  margin-top: 0;
+}
+
+.actionbar .bubble::before {
+  display: none;
+}
+
+.race {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  container-type: size;
+}
+
+/* 경주 화면은 기기 방향과 관계없이 가로로 보여 준다. */
+@media (orientation: portrait) and (pointer: coarse) {
+  .race {
+    inset: auto;
+    top: 0;
+    left: 0;
+    width: 100dvh;
+    height: 100dvw;
+    transform-origin: top left;
+    transform: rotate(90deg) translateY(-100%);
+  }
+}
+
+.overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(92cqw, 520px);
+  max-height: 86cqh;
+  overflow: auto;
+  text-align: center;
+}
+
+.ranking {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+
+.ranking li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 3px solid var(--ink);
+  border-radius: 16px;
+}
+
+.ranking li.me {
+  background: var(--sun);
+}
+
+.ranking .name {
+  flex: 1;
+}
+
+.ranking .time {
+  font-variant-numeric: tabular-nums;
+}
+
+.rank {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--ink);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+}
+
+.rank.top {
+  background: var(--sun);
+}
+
+.ranking li.me .rank.top {
+  background: var(--paper);
+}
+
+.progress {
+  height: 12px;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress > div {
+  height: 100%;
+  background: var(--sun);
+  animation: drain linear forwards;
+}
+
+/* 입력 글자는 16px 아래로 내리면 iOS Safari가 포커스 때 화면을 확대한다. */
+@media (max-width: 768px), (max-height: 500px) {
+  body {
+    font-size: 14px;
+  }
+
+  .page {
+    padding: 12px 12px 100px;
+    gap: 12px;
+  }
+
+  .logo {
+    font-size: 34px;
+  }
+
+  .logo.small {
+    font-size: 20px;
+  }
+
+  .title {
+    font-size: 17px;
+  }
+
+  .muted {
+    font-size: 12px;
+  }
+
+  .card {
+    padding: 12px;
+    border-width: 3px;
+    border-radius: 16px;
+    box-shadow: 0 3px 0 var(--ink);
+  }
+
+  .grid {
+    gap: 12px;
+  }
+
+  .btn {
+    padding: 8px 14px;
+  }
+
+  .btn.big {
+    padding: 8px 16px;
+    font-size: 15px;
+  }
+
+  .btn.small {
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+
+  .pill {
+    padding: 4px 10px;
+    font-size: 13px;
+  }
+
+  .badge {
+    font-size: 11px;
+  }
+
+  .input {
+    padding: 8px 12px;
+    font-size: 16px;
+  }
+
+  .map-cards {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+
+  .rank {
+    width: 26px;
+    height: 26px;
+  }
+
+  .ranking li,
+  .player {
+    padding: 6px 10px;
+  }
+}
+
+@keyframes drain {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0;
+  }
+}

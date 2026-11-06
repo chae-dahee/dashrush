@@ -59,19 +59,35 @@ export class TickClock {
 }
 
 const WRONG_WAY_ANGLE = (120 * Math.PI) / 180;
-const WRONG_WAY_MIN_SPEED = 2; // 타일/초
+const WRONG_WAY_MIN_SPEED = 1; // 타일/초
 const WRONG_WAY_SEC = 1;
+const WRONG_WAY_CLEAR_ANGLE = Math.PI / 2;
+const WRONG_WAY_CLEAR_SEC = 0.5;
 
 // 화면 표시용 역주행 판정이다. 서버 판정에는 영향이 없다.
 export class WrongWay {
   private sec = 0;
+  private okSec = 0;
+  private shown = false;
 
   update(map: MapData, k: KartState, dtSec: number): boolean {
     const speed = Math.hypot(k.vx, k.vy);
-    const diff = Math.abs(wrapAngle(Math.atan2(k.vy, k.vx) - trackDirection(map, k.cp)));
-    const wrong = !k.finished && speed > WRONG_WAY_MIN_SPEED && diff > WRONG_WAY_ANGLE;
-    this.sec = wrong ? this.sec + dtSec : 0;
-    return this.sec > WRONG_WAY_SEC;
+    const diff = Math.abs(wrapAngle(Math.atan2(k.vy, k.vx) - trackDirection(map, k)));
+    const moving = speed > WRONG_WAY_MIN_SPEED;
+    if (this.shown) {
+      const ok = k.finished || (moving && diff < WRONG_WAY_CLEAR_ANGLE);
+      this.okSec = ok ? this.okSec + dtSec : 0;
+      if (this.okSec > WRONG_WAY_CLEAR_SEC) this.shown = false;
+    } else {
+      const wrong = !k.finished && moving && diff > WRONG_WAY_ANGLE;
+      this.sec = wrong ? this.sec + dtSec : Math.max(0, this.sec - dtSec);
+      if (this.sec > WRONG_WAY_SEC) {
+        this.shown = true;
+        this.sec = 0;
+        this.okSec = 0;
+      }
+    }
+    return this.shown;
   }
 }
 
@@ -85,6 +101,7 @@ export class RaceView {
   private scene = new THREE.Scene();
   private camera = new THREE.PerspectiveCamera(CAM.third.fov, 1, 0.05, 400);
   private models = new Map<string, KartModel>();
+  private nextLayer = 0;
   private minimap: Minimap;
   private effects: Effects;
   private resizeObserver: ResizeObserver;
@@ -150,7 +167,7 @@ export class RaceView {
     for (const k of karts) {
       let model = this.models.get(k.id);
       if (!model) {
-        model = new KartModel(k.color, k.id === meId ? undefined : k.label);
+        model = new KartModel(k.color, k.id === meId ? undefined : k.label, this.nextLayer++);
         this.models.set(k.id, model);
         this.scene.add(model.root);
       }

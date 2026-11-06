@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
-import { getCookie, setCookie } from 'hono/cookie';
+import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { sign, verify } from 'hono/jwt';
 import { parse } from 'hono/utils/cookie';
 import {
@@ -10,7 +10,7 @@ import {
   TOKEN_TTL_SEC,
   type GuestInfo,
 } from '@dashrush/shared';
-import { JWT_SECRET } from './env.ts';
+import { COOKIE_SECURE, JWT_SECRET } from './env.ts';
 
 export async function verifyToken(token: string | undefined): Promise<GuestInfo | null> {
   if (!token) return null;
@@ -42,12 +42,17 @@ authApi.post('/guest', async (c) => {
   const token = await sign({ sub: userId, nick: nickname, exp }, JWT_SECRET, 'HS256');
   setCookie(c, TOKEN_COOKIE, token, {
     httpOnly: true,
-    secure: true,
+    secure: COOKIE_SECURE,
     sameSite: 'Lax',
     path: '/',
     maxAge: TOKEN_TTL_SEC,
   });
   return c.json({ userId, nickname } satisfies GuestInfo);
+});
+
+authApi.post('/logout', (c) => {
+  deleteCookie(c, TOKEN_COOKIE, { path: '/', secure: COOKIE_SECURE });
+  return c.body(null, 204);
 });
 
 // HttpOnly 쿠키는 스크립트가 읽을 수 없어, 재방문 시 닉네임 입력을 건너뛸지 판단하려면 서버에 물어야 한다.

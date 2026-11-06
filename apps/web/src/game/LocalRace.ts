@@ -29,7 +29,7 @@ interface Options {
   color: number;
   onHud: (hud: RaceHud) => void;
   onTime: (ms: number) => void;
-  onGauge: (g: { drifting: boolean; driftCharge: number; boostLeft: number }) => void;
+  onGauge: (g: { gauge: number; boostLeft: number }) => void;
   onWrongWay: (wrongWay: boolean) => void;
   onCountdown: (text: string | null) => void;
   onView: (view: ViewMode) => void;
@@ -90,14 +90,16 @@ export class LocalRace {
       angle: p.angle + wrapAngle(k.angle - p.angle) * alpha,
       color: this.opts.color,
       drifting: k.drifting,
-      driftCharge: k.driftCharge,
+      driftSlip: k.driftSlip,
       boostLeft: k.boostLeft,
       speed: Math.hypot(k.vx, k.vy),
       ghost: false,
+      fallLeft: k.fallLeft,
+      spawnLeft: k.spawnLeft,
     };
     const hit = this.view.draw([me], ME, dtSec, now);
     this.sound.frame(me, hit);
-    this.opts.onGauge(me);
+    this.opts.onGauge(k);
     const wrongWay = this.wrongWay.update(this.opts.map, k, dtSec);
     if (wrongWay !== this.wasWrongWay) this.opts.onWrongWay((this.wasWrongWay = wrongWay));
 

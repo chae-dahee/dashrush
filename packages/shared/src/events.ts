@@ -12,12 +12,14 @@ export interface PlayerInfo {
   team: Team | null;
   connected: boolean;
   bot: boolean;
+  ready: boolean; // 봇은 항상 true이고, 비공개 방 방장은 쓰지 않는다.
   wins: number; // 이 방에서 1등 한 횟수이며, 방이 해산되면 사라진다.
 }
 
 export interface RoomState {
   code: string;
   isPublic: boolean;
+  publicSize: number | null;
   mode: RoomMode;
   status: RoomStatus;
   hostId: string | null;
@@ -38,8 +40,14 @@ export interface KartSnapshot {
   vx: number;
   vy: number;
   drifting: boolean;
-  driftCharge: number; // 내 카트 예측을 서버 값에서 다시 계산하려면 게이지도 필요하다.
+  // 아래 네 값은 내 카트 예측을 서버 값에서 다시 계산할 때 필요하다.
+  driftSlip: number;
+  gauge: number;
+  sinceHit: number;
+  boostHeld: boolean;
   boostLeft: number;
+  fallLeft: number;
+  spawnLeft: number;
   lap: number;
   checkpoint: number;
   rank: number;
@@ -58,7 +66,8 @@ export interface RaceResultEntry {
 export interface ClientToServerEvents {
   'room:create': (p: { mode: RoomMode; mapId: string; laps: number }) => void;
   'room:join': (p: { code: string }) => void;
-  'room:quickMatch': () => void;
+  'room:quickMatch': (p: { size: number }) => void;
+  'room:ready': (p: { ready: boolean }) => void;
   'room:leave': () => void;
   'room:config': (p: { mode: RoomMode; mapId: string; laps: number }) => void;
   'room:team': (p: { team: Team }) => void;

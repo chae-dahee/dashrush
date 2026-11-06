@@ -13,12 +13,25 @@ export function segmentCross(p: Vec, q: Vec, a: Vec, b: Vec): number | null {
 
 const mid = (c: { a: Vec; b: Vec }): Vec => ({ x: (c.a.x + c.b.x) / 2, y: (c.a.y + c.b.y) / 2 });
 
-// 마지막으로 통과한 체크포인트에서 다음 체크포인트로 가는 트랙 진행 방향(라디안)이다. 출발 전(cp -1)에는 마지막 체크포인트에서 결승선으로 가는 방향이다.
-export function trackDirection(map: MapData, cp: number): number {
-  const n = map.checkpoints.length;
-  const from = mid(map.checkpoints[(cp + n) % n]);
-  const to = mid(map.checkpoints[(cp + 1) % n]);
-  return Math.atan2(to.y - from.y, to.x - from.x);
+// p에서 가장 가까운 트랙 중심선 선분의 진행 방향(라디안)이다. 중심선은 이웃한 체크포인트 중점을 이은 선, branches, 갈래길, 열린 곡선 지름길이다.
+export function trackDirection(map: MapData, p: Vec): number {
+  const cps = map.checkpoints;
+  const lines = [[...cps.map(mid), mid(cps[0])], ...(map.branches ?? []), ...(map.track?.lanes ?? []).map((l) => l.line), ...(map.track?.bridges ?? []).map((b) => b.line)];
+  let best = Infinity;
+  let dir = 0;
+  for (const line of lines) {
+    for (let i = 0; i + 1 < line.length; i++) {
+      const a = line[i], b = line[i + 1];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy)));
+      const d = Math.hypot(a.x + dx * t - p.x, a.y + dy * t - p.y);
+      if (d < best) {
+        best = d;
+        dir = Math.atan2(dy, dx);
+      }
+    }
+  }
+  return dir;
 }
 
 // 완주 랩 × 체크포인트 수 + 마지막 체크포인트 + 다음 체크포인트까지의 비율이다.

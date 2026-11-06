@@ -1,4 +1,5 @@
 export * from './constants.ts';
+export * from './curve.ts';
 export * from './events.ts';
 export * from './input.ts';
 export * from './map.ts';

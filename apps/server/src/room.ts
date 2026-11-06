@@ -53,6 +53,7 @@ interface Player {
   bot: boolean;
   connected: boolean;
   grace: NodeJS.Timeout | null; // 끊긴 사람의 유예 타이머
+  ready: boolean;
   wins: number;
 }
 
@@ -106,8 +107,8 @@ export function validConfig(p: unknown): p is Config {
   );
 }
 
-export function createRoom(io: GameServer, config: Config, isPublic = false): Room {
-  const room = new Room(io, newCode(), config, isPublic);
+export function createRoom(io: GameServer, config: Config, publicSize: number | null = null): Room {
+  const room = new Room(io, newCode(), config, publicSize);
   rooms.set(room.code, room);
   return room;
 }
@@ -118,15 +119,15 @@ export function findRoom(code: unknown): Room {
   return room;
 }
 
-export function quickMatch(io: GameServer, socket: GameSocket) {
+export function quickMatch(io: GameServer, socket: GameSocket, size: number) {
   const current = userRoom.get(socket.data.userId);
   if (current) return current.join(socket);
   const open = [...rooms.values()]
-    .filter((r) => r.isPublic && r.status === 'waiting' && r.size < MAX_PLAYERS)
+    .filter((r) => r.publicSize === size && r.status === 'waiting' && r.size < size)
     .sort((a, b) => b.size - a.size);
   const ids = Object.keys(MAPS);
   const map = MAPS[ids[Math.floor(Math.random() * ids.length)]];
-  (open[0] ?? createRoom(io, { mode: 'race', mapId: map.id, laps: map.laps }, true)).join(socket);
+  (open[0] ?? createRoom(io, { mode: 'race', mapId: map.id, laps: map.laps }, size)).join(socket);
 }
 
 export class Room {
@@ -150,11 +151,15 @@ export class Room {
     private io: GameServer,
     readonly code: string,
     config: Config,
-    readonly isPublic: boolean,
+    readonly publicSize: number | null,
   ) {
     this.mode = config.mode;
     this.mapId = config.mapId;
     this.laps = config.laps;
+  }
+
+  get isPublic() {
+    return this.publicSize !== null;
   }
 
   get size() {
@@ -171,7 +176,7 @@ export class Room {
     if (existing) return this.reconnect(existing, socket);
 
     if (this.status !== 'waiting') throw new RoomError('RACING', '경주 중인 방입니다.');
-    if (this.players.length >= MAX_PLAYERS) throw new RoomError('FULL', '방이 가득 찼습니다.');
+    if (this.players.length >= (this.publicSize ?? MAX_PLAYERS)) throw new RoomError('FULL', '방이 가득 찼습니다.');
     userRoom.get(userId)?.leave(userId);
     this.players.push(this.newPlayer(userId, nickname, socket.id, false));
     if (!this.isPublic) this.hostId ??= userId;
@@ -185,7 +190,18 @@ export class Room {
     const used = new Set(this.players.map((p) => p.gridSlot));
     let slot = 0;
     while (used.has(slot)) slot++;
-    return { id, nickname, socketId, gridSlot: slot, team: this.nextTeam(), bot, connected: true, grace: null, wins: 0 };
+    return {
+      id,
+      nickname,
+      socketId,
+      gridSlot: slot,
+      team: this.nextTeam(),
+      bot,
+      connected: true,
+      grace: null,
+      ready: bot,
+      wins: 0,
+    };
   }
 
   // 새로고침·새 탭·네트워크 복구로 같은 사용자가 다시 들어오면 자리를 유지하고 소켓만 바꾼다.
@@ -274,9 +290,21 @@ export class Room {
     this.broadcast();
   }
 
+  setReady(userId: string, ready: boolean) {
+    if (this.status !== 'waiting' || userId === this.hostId) return;
+    const player = this.players.find((p) => p.id === userId);
+    if (!player || player.ready === ready) return;
+    player.ready = ready;
+    this.broadcast();
+    this.updateStartTimer();
+  }
+
   start(userId: string) {
     this.requireHostWaiting(userId);
     if (this.players.length < 2) throw new RoomError('INVALID', '2명 이상이어야 시작할 수 있습니다.');
+    if (this.players.some((p) => p.id !== this.hostId && !p.ready)) {
+      throw new RoomError('INVALID', '모두 준비해야 시작할 수 있습니다.');
+    }
     if (this.mode === 'team') {
       const red = this.teamCount('red'), blue = this.teamCount('blue');
       if (red !== blue || red < 2) throw new RoomError('INVALID', '두 팀 인원이 같고 팀당 2명 이상이어야 합니다.');
@@ -312,15 +340,16 @@ export class Room {
     if (this.status !== 'waiting') throw new RoomError('RACING', '대기 중에만 할 수 있습니다.');
   }
 
-  // 공개 방은 방장이 없으므로 2명이 모이면 타이머로, 8명이 차면 바로 출발한다.
   private updateStartTimer() {
     if (!this.isPublic || this.status !== 'waiting') return;
-    if (this.players.length >= MAX_PLAYERS) return this.beginCountdown();
-    if (this.players.length >= 2 && !this.startTimer) {
+    const humans = this.humans();
+    if (humans.length > 0 && humans.every((p) => p.ready)) return this.beginCountdown();
+    const anyReady = humans.some((p) => p.ready);
+    if (anyReady && !this.startTimer) {
       this.startTimerEndsAt = Date.now() + QUICK_START_MS;
       this.startTimer = setTimeout(() => this.beginCountdown(), QUICK_START_MS);
       this.broadcast();
-    } else if (this.players.length < 2 && this.startTimer) {
+    } else if (!anyReady && this.startTimer) {
       this.clearStartTimer();
       this.broadcast();
     }
@@ -334,6 +363,10 @@ export class Room {
 
   private beginCountdown() {
     this.clearStartTimer();
+    while (this.publicSize !== null && this.players.length < this.publicSize) {
+      const n = ++this.botSeq;
+      this.players.push(this.newPlayer(`bot:${n}`, `봇 ${n}`, null, true));
+    }
     const map = MAPS[this.mapId];
     this.racers = new Map(
       this.players.map((p) => [
@@ -393,7 +426,7 @@ export class Room {
 
     for (const r of active) {
       if (r.bot) {
-        r.bits = botInput(r.kart, map);
+        r.bits = botInput(r.kart, map, Number(r.id.slice('bot:'.length)));
       } else {
         const next = r.queue.shift();
         if (next) {
@@ -411,8 +444,8 @@ export class Room {
       if (passed === 0 && kart.lap > prev.lap) this.onLap(r, (this.tick - 1 + crossFrac) * TICK_MS);
     }
 
-    // 완주한 카트와 끊긴 카트는 충돌에서 뺀다.
-    const colliding = active.filter((r) => !r.kart.finished && !r.ghost);
+    // 완주한 카트, 끊긴 카트, 바다에 빠졌거나 막 복귀한 카트는 충돌에서 뺀다.
+    const colliding = active.filter((r) => !r.kart.finished && !r.ghost && r.kart.fallLeft === 0 && r.kart.spawnLeft === 0);
     for (let i = 0; i < colliding.length; i++) {
       for (let j = i + 1; j < colliding.length; j++) collideKarts(colliding[i].kart, colliding[j].kart);
     }
@@ -428,8 +461,13 @@ export class Room {
         vx: r2(r.kart.vx),
         vy: r2(r.kart.vy),
         drifting: r.kart.drifting,
-        driftCharge: r2(r.kart.driftCharge),
+        driftSlip: r2(r.kart.driftSlip),
+        gauge: r2(r.kart.gauge),
+        sinceHit: r2(r.kart.sinceHit),
+        boostHeld: r.kart.boostHeld,
         boostLeft: r2(r.kart.boostLeft),
+        fallLeft: r2(r.kart.fallLeft),
+        spawnLeft: r2(r.kart.spawnLeft),
         lap: r.kart.lap,
         checkpoint: r.kart.cp,
         rank: i + 1,
@@ -516,6 +554,8 @@ export class Room {
     this.racers.clear();
     this.raceStartsAt = null;
     this.deadline = null;
+    if (this.isPublic) this.players = this.players.filter((p) => !p.bot);
+    for (const p of this.players) p.ready = p.bot;
     for (const p of this.players.filter((p) => !p.bot && !p.connected)) this.leave(p.id);
     if (rooms.get(this.code) !== this) return;
     this.broadcast();
@@ -540,6 +580,7 @@ export class Room {
     return {
       code: this.code,
       isPublic: this.isPublic,
+      publicSize: this.publicSize,
       mode: this.mode,
       status: this.status,
       hostId: this.hostId,
@@ -553,6 +594,7 @@ export class Room {
         team: p.team,
         connected: p.connected,
         bot: p.bot,
+        ready: p.ready,
         wins: p.wins,
       })),
       startTimerEndsAt: this.startTimerEndsAt,
