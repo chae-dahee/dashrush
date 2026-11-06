@@ -13,6 +13,14 @@ export function segmentCross(p: Vec, q: Vec, a: Vec, b: Vec): number | null {
 
 const mid = (c: { a: Vec; b: Vec }): Vec => ({ x: (c.a.x + c.b.x) / 2, y: (c.a.y + c.b.y) / 2 });
 
+// 마지막으로 통과한 체크포인트에서 다음 체크포인트로 가는 트랙 진행 방향(라디안)이다. 출발 전(cp -1)에는 마지막 체크포인트에서 결승선으로 가는 방향이다.
+export function trackDirection(map: MapData, cp: number): number {
+  const n = map.checkpoints.length;
+  const from = mid(map.checkpoints[(cp + n) % n]);
+  const to = mid(map.checkpoints[(cp + 1) % n]);
+  return Math.atan2(to.y - from.y, to.x - from.x);
+}
+
 // 완주 랩 × 체크포인트 수 + 마지막 체크포인트 + 다음 체크포인트까지의 비율이다.
 export function progress(map: MapData, k: { x: number; y: number; lap: number; cp: number }): number {
   const cps = map.checkpoints;

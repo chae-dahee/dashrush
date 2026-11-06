@@ -1,8 +1,28 @@
 import * as THREE from 'three';
-import { DRIFT_CHARGE_SEC, surfaceAt, type KartState, type MapData } from '@dashrush/shared';
+import { driftTier, surfaceAt, type MapData } from '@dashrush/shared';
 
 // 물리 좌표 (x, y)는 장면의 (x, 0, y)이고 1 단위가 1 타일이다.
 // 캐주얼 카툰 톤의 임시 모형이며 4단계에서 에셋으로 교체한다.
+
+// 그리기에 필요한 카트 상태이다. 다른 카트는 스냅샷에 드리프트 게이지가 없어 0으로 둔다.
+export interface ViewKart {
+  id: string;
+  x: number;
+  y: number;
+  angle: number;
+  color: number;
+  drifting: boolean;
+  driftCharge: number;
+  boostLeft: number;
+  speed: number;
+  ghost: boolean;
+  label?: string; // 다른 카트 위에 띄우는 닉네임
+}
+
+// 드리프트 게이지 1~3단계 색이다. 카트 불꽃과 HUD 게이지가 같이 쓴다.
+export const DRIFT_TIER_COLORS = [0x6fd6ff, 0xff8a1f, 0xb05cff];
+
+const BUMP_SPEED_DROP = 2.5; // 한 프레임에 이만큼 속력이 떨어지면 부딪힌 것으로 본다.
 
 const OUTLINE = 0x2b2340;
 const TEX_PX = 32; // 바닥 텍스처의 타일당 픽셀 수
@@ -152,8 +172,11 @@ export class KartModel {
   private flame: THREE.Mesh;
   private sparks: THREE.Mesh[] = [];
   private sparkMat = new THREE.MeshBasicMaterial({ color: 0x6fd6ff });
+  private ghost = false;
+  private lastSpeed = 0;
+  private squash = 0;
 
-  constructor(color: number) {
+  constructor(color: number, label?: string) {
     // 모형은 +x 방향을 앞으로 만든다.
     const chassis = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.22, 0.56), toon(color));
     chassis.position.y = 0.2;
@@ -174,6 +197,7 @@ export class KartModel {
       new THREE.CircleGeometry(0.5, 24),
       new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false }),
     );
+    shadow.material.userData.opacity = 0.22; // 고스트 상태에서 돌아올 때 쓰는 원래 투명도
     shadow.rotation.x = -Math.PI / 2;
     shadow.scale.set(1.1, 0.75, 1);
     shadow.position.y = 0.01;
@@ -191,22 +215,76 @@ export class KartModel {
       this.root.add(s);
     }
     this.root.add(this.body);
+    if (label) this.root.add(nameLabel(label));
   }
 
-  update(k: KartState, x: number, y: number, angle: number, time: number) {
-    this.root.position.set(x, 0, y);
-    this.root.rotation.y = -angle;
+  // 반환값이 true이면 이번 갱신에서 부딪혔다고 본다. 효과음 판단에 쓴다.
+  update(k: ViewKart, time: number, dtSec: number): boolean {
+    this.root.position.set(k.x, 0, k.y);
+    this.root.rotation.y = -k.angle;
+
+    if (k.ghost !== this.ghost) {
+      this.ghost = k.ghost;
+      this.root.traverse((o) => {
+        if (!(o instanceof THREE.Mesh) && !(o instanceof THREE.Sprite)) return;
+        const m = o.material as THREE.Material;
+        m.transparent = true;
+        m.opacity = k.ghost ? 0.35 : m.userData.opacity ?? 1;
+      });
+    }
+
+    // 속력이 갑자기 떨어지면 부딪힌 것으로 보고 차체를 잠깐 찌그러뜨린다. 그리기에만 적용한다.
+    const hit = this.lastSpeed - k.speed > BUMP_SPEED_DROP;
+    this.lastSpeed = k.speed;
+    if (hit) this.squash = 1;
+    this.squash = Math.max(0, this.squash - dtSec * 5);
+    const s = Math.sin(this.squash * Math.PI) * 0.22;
+    this.body.scale.set(1 + s, 1 - s, 1 + s);
 
     this.flame.visible = k.boostLeft > 0;
     if (this.flame.visible) this.flame.scale.set(1, 0.8 + Math.random() * 0.5, 1);
 
-    // 드리프트 게이지 단계: 충전 중은 파랑, 부스트 준비는 주황
-    const ready = k.driftCharge >= DRIFT_CHARGE_SEC;
-    this.sparkMat.color.set(ready ? 0xff8a1f : 0x6fd6ff);
+    // 드리프트 게이지 단계별 불꽃이다. 단계가 오를수록 색이 바뀌고 커진다.
+    const tier = driftTier(k.driftCharge);
+    this.sparkMat.color.set(tier > 0 ? DRIFT_TIER_COLORS[tier - 1] : 0xffffff);
     for (const s of this.sparks) {
       s.visible = k.drifting;
       s.rotation.y = time * 12;
-      s.scale.setScalar(ready ? 1.4 : 1);
+      s.scale.setScalar(1 + tier * 0.3);
     }
+    return hit;
   }
+
+  dispose() {
+    this.root.removeFromParent();
+    this.root.traverse((o) => {
+      if (!(o instanceof THREE.Mesh) && !(o instanceof THREE.Sprite)) return;
+      o.geometry.dispose();
+      const m = o.material as THREE.MeshBasicMaterial;
+      m.map?.dispose();
+      m.dispose();
+    });
+  }
+}
+
+// 다른 카트 위에 띄우는 닉네임 라벨이다.
+function nameLabel(text: string): THREE.Sprite {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d')!;
+  ctx.font = 'bold 34px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = '#2b2340';
+  ctx.strokeText(text, 128, 32);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(text, 128, 32);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthWrite: false }));
+  sprite.scale.set(1.6, 0.4, 1);
+  sprite.position.y = 1;
+  return sprite;
 }

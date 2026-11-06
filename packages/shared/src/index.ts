@@ -5,3 +5,4 @@ export * from './map.ts';
 export * from './maps/index.ts';
 export * from './physics.ts';
 export * from './track.ts';
+export * from './bot.ts';
