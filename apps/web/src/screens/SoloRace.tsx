@@ -24,7 +24,6 @@ export function SoloRace({ mapId, onExit }: { mapId: string; onExit: () => void 
       laps: map.laps,
       color: 0xff6f91,
       onHud: setHud,
-      // 경주 시간은 매 프레임 바뀌므로 React state 대신 DOM을 직접 갱신한다.
       onTime: (ms) => {
         if (timeRef.current) timeRef.current.textContent = formatMs(ms);
       },

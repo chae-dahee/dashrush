@@ -77,7 +77,6 @@ export class Effects {
     const fx = Math.cos(k.angle), fy = Math.sin(k.angle);
     const at = (back: number, side: number) => ({ x: k.x - fx * back - fy * side, y: k.y - fy * back + fx * side });
 
-    // 잔디·모래 먼지
     const surface = surfaceAt(this.map, Math.floor(k.x), Math.floor(k.y));
     if ((surface === 'grass' || surface === 'sand') && k.speed >= DUST_MIN_SPEED) {
       let n = (this.dustCarry.get(k.id) ?? 0) + DUST_RATE * dtSec;

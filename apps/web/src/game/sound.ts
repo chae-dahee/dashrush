@@ -98,7 +98,7 @@ export class RaceSound {
   private others = new Map<string, { osc: OscillatorNode; gain: GainNode }>();
   private boosting = false;
 
-  // 다른 카트 엔진음은 내 카트와의 거리에 따라 줄여, 8대가 한꺼번에 시끄럽게 겹치지 않게 한다.
+  // 다른 카트 엔진음은 내 카트와의 거리에 따라 줄인다.
   otherEngines(karts: { id: string; speed: number; dist: number }[]) {
     const a = audio();
     if (!a || a.ctx.state !== 'running') return;

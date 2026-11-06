@@ -114,7 +114,7 @@ export function stepKart(prev: KartState, bits: number, map: MapData, laps: numb
 
   const boosting = k.boostLeft > 0;
   const maxSpeed = MAX_SPEED * surf.speed * (boosting ? BOOST_MUL : 1);
-  // 드리프트를 푸는 순간 속도를 바로 올려, 줄어든 속도를 되찾는 데 부스트를 다 쓰지 않게 한다.
+  // 드리프트를 푸는 순간 앞쪽 속도를 kick만큼 바로 올리되 최고 속도를 넘기지 않는다.
   if (kick > 0) fwd = Math.max(fwd, Math.min(fwd + kick, maxSpeed));
   if (accel || boosting) fwd += ACCEL * (boosting ? BOOST_MUL : 1) * DT;
   if (brake) {

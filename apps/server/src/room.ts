@@ -63,8 +63,8 @@ interface Racer {
   bot: boolean;
   kart: KartState;
   queue: { seq: number; bits: number }[];
-  lastSeq: number; // 마지막으로 받은 sequence
-  appliedSeq: number; // 마지막으로 적용한 sequence
+  lastSeq: number;
+  appliedSeq: number;
   bits: number;
   idleTicks: number;
   lapStartMs: number;
@@ -118,7 +118,6 @@ export function findRoom(code: unknown): Room {
   return room;
 }
 
-// 대기열 없이 자리가 남은 공개 방 중 사람이 가장 많은 방에 넣고, 없으면 새로 만든다.
 export function quickMatch(io: GameServer, socket: GameSocket) {
   const current = userRoom.get(socket.data.userId);
   if (current) return current.join(socket);
@@ -233,7 +232,6 @@ export class Room {
     const racer = this.racers.get(userId);
     if (racer) racer.left = true;
 
-    // 봇만 남아도 해산한다.
     if (this.humans().length === 0) return this.dispose();
     if (this.hostId === userId) this.hostId = this.humans()[0].id;
     if (this.status === 'countdown' || this.status === 'racing') this.checkRaceEnd();
@@ -248,7 +246,6 @@ export class Room {
     this.mapId = config.mapId;
     this.laps = config.laps;
     if (modeChanged) {
-      // 팀전으로 바꾸면 입장 순서대로 번갈아 배정한다.
       this.players.forEach((p, i) => (p.team = this.mode === 'team' ? (i % 2 === 0 ? 'red' : 'blue') : null));
     }
     this.broadcast();
@@ -292,7 +289,7 @@ export class Room {
     const racer = this.racers.get(userId);
     const i = p as { seq?: unknown; bits?: unknown } | null;
     if (!this.players.some((pl) => pl.id === userId && pl.socketId === socketId)) return;
-    // 정상 클라이언트는 잘못된 값을 보내지 않으므로 형식이 어긋나면 조용히 버린다.
+    // 형식이 어긋난 입력은 오류 응답 없이 버린다.
     if (!racer || racer.left || !i || !Number.isInteger(i.seq) || !Number.isInteger(i.bits)) return;
     const seq = i.seq as number, bits = i.bits as number;
     if (seq <= racer.lastSeq || bits < 0 || bits > INPUT_MAX) return;
@@ -372,7 +369,7 @@ export class Room {
     this.tick = 0;
     this.broadcast();
 
-    // setInterval 주기를 그대로 믿지 않고 실제 경과 시간만큼 고정 길이 tick을 돌린다.
+    // 실제 경과 시간만큼 고정 길이 tick을 돌린다.
     let last = performance.now();
     let acc = 0;
     this.loop = setInterval(() => {
@@ -414,7 +411,7 @@ export class Room {
       if (passed === 0 && kart.lap > prev.lap) this.onLap(r, (this.tick - 1 + crossFrac) * TICK_MS);
     }
 
-    // 완주한 카트는 결승선 뒤에 멈춰 서고 끊긴 카트는 트랙 위에 서 있으므로, 둘 다 장애물이 되지 않게 충돌에서 뺀다.
+    // 완주한 카트와 끊긴 카트는 충돌에서 뺀다.
     const colliding = active.filter((r) => !r.kart.finished && !r.ghost);
     for (let i = 0; i < colliding.length; i++) {
       for (let j = i + 1; j < colliding.length; j++) collideKarts(colliding[i].kart, colliding[j].kart);
@@ -519,7 +516,6 @@ export class Room {
     this.racers.clear();
     this.raceStartsAt = null;
     this.deadline = null;
-    // 대기 중에는 끊긴 자리를 붙잡아 둘 이유가 없다.
     for (const p of this.players.filter((p) => !p.bot && !p.connected)) this.leave(p.id);
     if (rooms.get(this.code) !== this) return;
     this.broadcast();

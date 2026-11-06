@@ -53,7 +53,7 @@ export const INPUT_STALE_TICKS = 6; // 이만큼 새 입력이 없으면 중립 
 export const INTERP_DELAY_MS = 100;
 export const EXTRAPOLATE_MAX_MS = 100;
 
-// 그리드 슬롯 순서이며, 이웃한 색끼리 명도 차이를 크게 두었다.
+// 그리드 슬롯 순서이다.
 export const KART_COLORS = [0xff6f91, 0x3d7bff, 0xffc83d, 0x6a3fb5, 0x4fd18b, 0xe8452c, 0x7fe3ff, 0x2b6b4a];
 
 export const KART_BOUNCE = 0.5; // 카트끼리 부딪힐 때 반발 계수

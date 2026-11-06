@@ -7,7 +7,6 @@ import { authApi, tokenFromCookieHeader, verifyToken } from './auth.ts';
 import { delayed, LAG_MS, PORT } from './env.ts';
 import { createRoom, findRoom, quickMatch, RoomError, roomOf, validConfig, type GameServer } from './room.ts';
 
-// 잘못된 맵이 경주 도중이 아니라 시작 시점에 드러나게 한다.
 const mapErrors = Object.values(MAPS).flatMap(validateMap);
 if (mapErrors.length) throw new Error(mapErrors.join('\n'));
 
@@ -34,7 +33,6 @@ io.use(async (socket, next) => {
 io.on('connection', (socket) => {
   const { userId } = socket.data;
 
-  // 1초에 tick 속도의 2배를 넘는 이벤트는 버린다.
   let windowStart = 0;
   let count = 0;
   socket.use((_, next) => {
@@ -47,7 +45,6 @@ io.on('connection', (socket) => {
     delayed(next);
   });
 
-  // 방 요청 오류는 요청한 소켓에만 알린다.
   const handle = (fn: () => void) => {
     try {
       fn();

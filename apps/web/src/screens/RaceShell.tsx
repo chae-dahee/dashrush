@@ -32,7 +32,6 @@ export interface GaugeState {
   boostLeft: number;
 }
 
-// 드리프트 게이지는 매 프레임 바뀌므로 React state 대신 DOM을 직접 갱신한다.
 export function updateGauge(el: HTMLDivElement | null, g: GaugeState) {
   if (!el) return;
   let from = 0;
