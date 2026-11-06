@@ -14,6 +14,9 @@ const KEY_BITS: Record<string, number> = {
   ShiftRight: INPUT_DRIFT,
 };
 
+// 화면 터치 버튼이 누른 입력 비트이다. 키보드 입력과 합쳐 보낸다.
+export const touch = { bits: 0 };
+
 export class Keyboard {
   private pressed = new Set<string>();
 
@@ -24,7 +27,10 @@ export class Keyboard {
   };
   private onUp = (e: KeyboardEvent) => this.pressed.delete(e.code);
   // 창이 포커스를 잃으면 keyup이 오지 않아 키가 눌린 채로 남으므로 모두 뗀다.
-  private onBlur = () => this.pressed.clear();
+  private onBlur = () => {
+    this.pressed.clear();
+    touch.bits = 0;
+  };
 
   constructor() {
     window.addEventListener('keydown', this.onDown);
@@ -33,7 +39,7 @@ export class Keyboard {
   }
 
   bits(): number {
-    let bits = 0;
+    let bits = touch.bits;
     for (const code of this.pressed) bits |= KEY_BITS[code];
     return bits;
   }

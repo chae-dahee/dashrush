@@ -11,6 +11,8 @@ export interface PlayerInfo {
   color: number;
   team: Team | null;
   connected: boolean;
+  bot: boolean;
+  wins: number; // 이 방에서 1등 한 횟수이며, 방이 해산되면 사라진다.
 }
 
 export interface RoomState {
@@ -36,6 +38,7 @@ export interface KartSnapshot {
   vx: number;
   vy: number;
   drifting: boolean;
+  driftCharge: number; // 내 카트 예측을 서버 값에서 다시 계산하려면 게이지도 필요하다.
   boostLeft: number;
   lap: number;
   checkpoint: number;
@@ -59,6 +62,7 @@ export interface ClientToServerEvents {
   'room:leave': () => void;
   'room:config': (p: { mode: RoomMode; mapId: string; laps: number }) => void;
   'room:team': (p: { team: Team }) => void;
+  'room:bot': (p: { action: 'add' } | { action: 'remove'; botId: string }) => void;
   'room:start': () => void;
   'race:input': (p: { seq: number; bits: number }) => void;
   'time:ping': (clientTime: number) => void;

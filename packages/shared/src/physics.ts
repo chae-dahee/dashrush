@@ -4,12 +4,13 @@ import {
   BOOST_SEC,
   BRAKE,
   DRAG,
-  DRIFT_BOOST_SEC,
-  DRIFT_CHARGE_SEC,
   DRIFT_GRIP_MUL,
   DRIFT_MIN_SPEED,
+  DRIFT_SLIP_MIN,
+  DRIFT_TIERS,
   DRIFT_TURN_MUL,
   GRIP,
+  KART_BOUNCE,
   KART_RADIUS,
   MAX_SPEED,
   OVERSPEED_DECEL,
@@ -63,6 +64,13 @@ export function createKart(slot: GridSlot): KartState {
   };
 }
 
+// 드리프트 게이지 단계이다. 0은 아직 부스트를 얻지 못하는 상태이다.
+export function driftTier(charge: number): number {
+  let tier = 0;
+  while (tier < DRIFT_TIERS.length && charge >= DRIFT_TIERS[tier].charge) tier++;
+  return tier;
+}
+
 // 이전 상태, 입력, 맵으로 1 tick 뒤 상태를 만든다. 서버 판정과 클라이언트 예측이 같은 결과를 내도록 순수 함수로 유지한다.
 export function stepKart(prev: KartState, bits: number, map: MapData, laps: number): StepResult {
   const k = { ...prev };
@@ -78,16 +86,19 @@ export function stepKart(prev: KartState, bits: number, map: MapData, laps: numb
   let fx = Math.cos(k.angle), fy = Math.sin(k.angle);
   const fwdBefore = k.vx * fx + k.vy * fy;
 
+  let kick = 0;
   if (!k.drifting && has(bits, INPUT_DRIFT) && steer !== 0 && fwdBefore > DRIFT_MIN_SPEED) {
     k.drifting = true;
     k.driftCharge = 0;
   } else if (k.drifting && (!has(bits, INPUT_DRIFT) || fwdBefore < DRIFT_MIN_SPEED / 2)) {
-    if (k.driftCharge >= DRIFT_CHARGE_SEC) k.boostLeft = Math.max(k.boostLeft, DRIFT_BOOST_SEC);
+    const tier = driftTier(k.driftCharge);
+    if (tier > 0) {
+      k.boostLeft = Math.max(k.boostLeft, DRIFT_TIERS[tier - 1].boostSec);
+      kick = DRIFT_TIERS[tier - 1].kick;
+    }
     k.drifting = false;
     k.driftCharge = 0;
   }
-  if (k.drifting && steer !== 0) k.driftCharge += DT;
-
   const turnFactor = Math.max(-1, Math.min(1, fwdBefore / TURN_FULL_SPEED));
   k.angle += steer * TURN_RATE * (k.drifting ? DRIFT_TURN_MUL : 1) * turnFactor * DT;
   if (k.angle > Math.PI) k.angle -= 2 * Math.PI;
@@ -98,9 +109,13 @@ export function stepKart(prev: KartState, bits: number, map: MapData, laps: numb
   fy = Math.sin(k.angle);
   let fwd = k.vx * fx + k.vy * fy;
   let lat = -k.vx * fy + k.vy * fx;
+  // 게이지는 옆으로 미끄러지는 동안 쌓인다. 코너를 도는 내내 차고, 직선에서 키만 누르고 있으면 차지 않는다.
+  if (k.drifting && Math.abs(lat) > DRIFT_SLIP_MIN) k.driftCharge += DT;
 
   const boosting = k.boostLeft > 0;
   const maxSpeed = MAX_SPEED * surf.speed * (boosting ? BOOST_MUL : 1);
+  // 드리프트를 푸는 순간 속도를 바로 올려, 줄어든 속도를 되찾는 데 부스트를 다 쓰지 않게 한다.
+  if (kick > 0) fwd = Math.max(fwd, Math.min(fwd + kick, maxSpeed));
   if (accel || boosting) fwd += ACCEL * (boosting ? BOOST_MUL : 1) * DT;
   if (brake) {
     fwd = fwd > 0 ? Math.max(0, fwd - BRAKE * DT) : Math.max(-REVERSE_MAX, fwd - REVERSE_ACCEL * DT);
@@ -149,6 +164,31 @@ export function stepKart(prev: KartState, bits: number, map: MapData, laps: numb
   }
 
   return { kart: k, passed, crossFrac };
+}
+
+// 두 카트를 원으로 보고 겹친 만큼 절반씩 밀어내며, 서로 다가오는 속도에 반발 계수를 적용한다. 서버만 쓴다.
+export function collideKarts(a: KartState, b: KartState) {
+  let dx = b.x - a.x, dy = b.y - a.y;
+  let d = Math.hypot(dx, dy);
+  const overlap = 2 * KART_RADIUS - d;
+  if (overlap <= 0) return;
+  if (d === 0) {
+    dx = 1;
+    dy = 0;
+    d = 1;
+  }
+  const nx = dx / d, ny = dy / d;
+  a.x -= (nx * overlap) / 2;
+  a.y -= (ny * overlap) / 2;
+  b.x += (nx * overlap) / 2;
+  b.y += (ny * overlap) / 2;
+  const vn = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+  if (vn >= 0) return;
+  const j = ((1 + KART_BOUNCE) * vn) / 2;
+  a.vx += j * nx;
+  a.vy += j * ny;
+  b.vx -= j * nx;
+  b.vy -= j * ny;
 }
 
 function resolveWalls(k: KartState, map: MapData): boolean {
