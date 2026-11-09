@@ -465,6 +465,7 @@ export class Room {
         gauge: r2(r.kart.gauge),
         sinceHit: r2(r.kart.sinceHit),
         boostHeld: r.kart.boostHeld,
+        offroadSec: r2(r.kart.offroadSec),
         boostLeft: r2(r.kart.boostLeft),
         fallLeft: r2(r.kart.fallLeft),
         spawnLeft: r2(r.kart.spawnLeft),

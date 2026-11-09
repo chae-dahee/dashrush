@@ -22,6 +22,7 @@ import {
   KART_BOUNCE,
   KART_RADIUS,
   MAX_SPEED,
+  OFFROAD_RESPAWN_SEC,
   OVERSPEED_DECEL,
   REVERSE_ACCEL,
   REVERSE_MAX,
@@ -53,6 +54,7 @@ export interface KartState {
   gauge: number; // 부스트 게이지(%)
   sinceHit: number; // 마지막으로 벽이나 카트에 부딪힌 뒤 지난 시간(초)
   boostHeld: boolean; // 직전 tick의 부스트 키 상태이며, 누른 순간만 부스트를 쓰게 한다.
+  offroadSec: number;
   boostLeft: number;
   lap: number; // 완주한 랩 수
   cp: number; // 마지막으로 통과한 체크포인트. 출발 전에는 -1이다.
@@ -79,6 +81,7 @@ export function createKart(slot: GridSlot): KartState {
     gauge: 0,
     sinceHit: 0,
     boostHeld: false,
+    offroadSec: 0,
     boostLeft: 0,
     lap: 0,
     cp: -1,
@@ -120,9 +123,9 @@ export function stepKart(prev: KartState, bits: number, map: MapData, laps: numb
   k.sinceHit += DT;
 
   const boostKey = has(bits, INPUT_BOOST);
-  if (boostKey && !k.boostHeld && k.gauge >= BOOST_USE_COST) {
+  if (boostKey && !k.boostHeld && k.boostLeft === 0 && k.gauge >= BOOST_USE_COST) {
     k.gauge -= BOOST_USE_COST;
-    k.boostLeft = Math.max(k.boostLeft, BOOST_USE_SEC);
+    k.boostLeft = BOOST_USE_SEC;
   }
   k.boostHeld = boostKey;
 
@@ -193,8 +196,11 @@ export function stepKart(prev: KartState, bits: number, map: MapData, laps: numb
     }
   }
 
-  if (surfaceAtPoint(map, k.x, k.y) === 'sea') {
+  const here = surfaceAtPoint(map, k.x, k.y);
+  k.offroadSec = here === 'verge' || here === 'offroad' ? k.offroadSec + DT : 0;
+  if (here === 'sea' || k.offroadSec >= OFFROAD_RESPAWN_SEC) {
     k.fallLeft = FALL_SEC;
+    k.offroadSec = 0;
     k.vx = k.vy = 0;
     k.drifting = false;
     k.driftSlip = 0;
@@ -298,6 +304,22 @@ function resolveWalls(k: KartState, map: MapData): WallContact {
         if (-vn > hit.impact) Object.assign(hit, { impact: -vn, nx, ny });
       }
     }
+  }
+  for (const d of map.decor) {
+    let dx = k.x - d.x, dy = k.y - d.y;
+    let distance = Math.hypot(dx, dy);
+    const minDistance = KART_RADIUS + d.radius;
+    if (distance >= minDistance) continue;
+    if (distance === 0) {
+      dx = -k.vx;
+      dy = -k.vy;
+      distance = Math.hypot(dx, dy) || 1;
+    }
+    const nx = dx / distance, ny = dy / distance;
+    k.x = d.x + nx * minDistance;
+    k.y = d.y + ny * minDistance;
+    const impact = -(k.vx * nx + k.vy * ny);
+    if (impact > hit.impact) Object.assign(hit, { impact, nx, ny });
   }
   return hit;
 }

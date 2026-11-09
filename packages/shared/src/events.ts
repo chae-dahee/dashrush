@@ -40,11 +40,12 @@ export interface KartSnapshot {
   vx: number;
   vy: number;
   drifting: boolean;
-  // 아래 네 값은 내 카트 예측을 서버 값에서 다시 계산할 때 필요하다.
+  // 아래 다섯 값은 내 카트 예측을 서버 값에서 다시 계산할 때 필요하다.
   driftSlip: number;
   gauge: number;
   sinceHit: number;
   boostHeld: boolean;
+  offroadSec: number;
   boostLeft: number;
   fallLeft: number;
   spawnLeft: number;

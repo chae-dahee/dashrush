@@ -2,7 +2,6 @@ import { useEffect, useState, type ReactNode, type RefObject } from 'react';
 import {
   BOOST_USE_COST,
   GAUGE_MAX,
-  INPUT_ACCEL,
   INPUT_BOOST,
   INPUT_BRAKE,
   INPUT_DRIFT,
@@ -113,19 +112,23 @@ export function RaceShell({
 const isTouch = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
 
 const TOUCH_LEFT = [
-  { label: '가속', bit: INPUT_ACCEL },
-  { label: '브레이크', bit: INPUT_BRAKE },
-  { label: '드리프트', bit: INPUT_DRIFT },
-];
-const TOUCH_RIGHT = [
   { label: '◀', bit: INPUT_LEFT },
   { label: '▶', bit: INPUT_RIGHT },
 ];
+const TOUCH_RIGHT = [
+  { label: '브레이크', bit: INPUT_BRAKE },
+  { label: '드리프트', bit: INPUT_DRIFT },
+];
 const TOUCH_BOOST = { label: '부스트', bit: INPUT_BOOST };
 
-// 왼손은 가속·브레이크·드리프트, 오른손은 좌·우 회전이다.
 function TouchControls() {
-  useEffect(() => () => void (touch.bits = 0), []);
+  useEffect(() => {
+    touch.auto = true;
+    return () => {
+      touch.bits = 0;
+      touch.auto = false;
+    };
+  }, []);
   const button = ({ label, bit }: { label: string; bit: number }) => {
     const press = (e: React.PointerEvent) => {
       e.preventDefault();

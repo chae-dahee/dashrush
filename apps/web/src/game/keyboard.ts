@@ -15,7 +15,7 @@ const KEY_BITS: Record<string, number> = {
 };
 
 // 화면 터치 버튼이 누른 입력 비트이다. 키보드 입력과 합쳐 보낸다.
-export const touch = { bits: 0 };
+export const touch = { bits: 0, auto: false };
 
 export class Keyboard {
   private pressed = new Set<string>();
@@ -41,6 +41,7 @@ export class Keyboard {
   bits(): number {
     let bits = touch.bits;
     for (const code of this.pressed) bits |= KEY_BITS[code];
+    if (touch.auto && !(bits & INPUT_BRAKE)) bits |= INPUT_ACCEL;
     return bits;
   }
 
