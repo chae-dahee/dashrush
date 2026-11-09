@@ -159,6 +159,7 @@ export class NetRace {
       gauge: s.gauge,
       sinceHit: s.sinceHit,
       boostHeld: s.boostHeld,
+      offroadSec: s.offroadSec,
       boostLeft: s.boostLeft,
       lap: s.lap,
       cp: s.checkpoint,

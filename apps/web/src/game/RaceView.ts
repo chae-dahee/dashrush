@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { TICK_MS, trackDirection, type KartState, type MapData } from '@dashrush/shared';
+import { heightAt, TICK_MS, trackDirection, type KartState, type MapData } from '@dashrush/shared';
+import { DecorLayer } from './decor.ts';
 import { Effects } from './effects.ts';
 import { Minimap } from './minimap.ts';
 import { buildTrack, KartModel, type ViewKart } from './scene.ts';
@@ -10,7 +11,7 @@ const VIEW_KEY = 'dashrush.view';
 
 const CAM = {
   third: { back: 3.0, lookAhead: 2.0, lookHeight: 0.35, pitchDeg: 20, fov: 68 },
-  first: { eyeForward: 0.1, eyeHeight: 0.5, fov: 78 },
+  first: { eyeForward: 0.1, eyeHeight: 1.2, pitchDeg: 9, fov: 78 },
   boostFov: 10,
   yawFollow: 8, // 초당 따라잡는 비율
   driftYawFollow: 3,
@@ -104,6 +105,7 @@ export class RaceView {
   private nextLayer = 0;
   private minimap: Minimap;
   private effects: Effects;
+  private decor: DecorLayer;
   private resizeObserver: ResizeObserver;
   private view: ViewMode = loadView();
   private camYaw: number | null = null;
@@ -112,7 +114,7 @@ export class RaceView {
   constructor(
     private host: HTMLElement,
     minimap: HTMLCanvasElement,
-    map: MapData,
+    private map: MapData,
     private onView: (view: ViewMode) => void,
   ) {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -127,6 +129,8 @@ export class RaceView {
     this.scene.add(buildTrack(map, this.renderer));
     this.minimap = new Minimap(minimap, map);
     this.effects = new Effects(this.scene, map);
+    this.decor = new DecorLayer(map);
+    this.scene.add(this.decor.root);
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(host);
@@ -171,7 +175,7 @@ export class RaceView {
         this.models.set(k.id, model);
         this.scene.add(model.root);
       }
-      const hit = model.update(k, now / 1000, dtSec);
+      const hit = model.update(k, now / 1000, dtSec, this.map);
       if (k.id === meId) meHit = hit;
       model.body.visible = k.id !== meId || this.view === 'third';
       this.effects.kart(k, hit, dtSec);
@@ -183,6 +187,7 @@ export class RaceView {
       }
     }
     this.effects.update(dtSec);
+    this.decor.update(now / 1000);
 
     const me = karts.find((k) => k.id === meId);
     if (me) this.followCamera(me, dtSec);
@@ -195,6 +200,7 @@ export class RaceView {
 
   private followCamera(me: ViewKart, dtSec: number) {
     const boostFov = me.boostLeft > 0 ? CAM.boostFov : 0;
+    const ground = heightAt(this.map, me.x, me.y);
     if (this.view === 'third') {
       const follow = me.drifting ? CAM.driftYawFollow : CAM.yawFollow;
       this.camYaw ??= me.angle;
@@ -203,15 +209,15 @@ export class RaceView {
       const c = CAM.third;
       // 시선이 수평에서 pitchDeg만큼 내려다보도록 카메라 높이를 정한다.
       const height = c.lookHeight + (c.back + c.lookAhead) * Math.tan((c.pitchDeg * Math.PI) / 180);
-      this.camera.position.set(me.x - fx * c.back, height, me.y - fz * c.back);
-      this.camera.lookAt(me.x + fx * c.lookAhead, c.lookHeight, me.y + fz * c.lookAhead);
+      this.camera.position.set(me.x - fx * c.back, ground + height, me.y - fz * c.back);
+      this.camera.lookAt(me.x + fx * c.lookAhead, ground + c.lookHeight, me.y + fz * c.lookAhead);
       this.fov += (c.fov + boostFov - this.fov) * (1 - Math.exp(-6 * dtSec));
     } else {
       this.camYaw = me.angle;
       const fx = Math.cos(me.angle), fz = Math.sin(me.angle);
       const c = CAM.first;
-      this.camera.position.set(me.x + fx * c.eyeForward, c.eyeHeight, me.y + fz * c.eyeForward);
-      this.camera.lookAt(me.x + fx * 10, c.eyeHeight * 0.6, me.y + fz * 10);
+      this.camera.position.set(me.x + fx * c.eyeForward, ground + c.eyeHeight, me.y + fz * c.eyeForward);
+      this.camera.lookAt(me.x + fx * 10, ground + c.eyeHeight - 10 * Math.tan((c.pitchDeg * Math.PI) / 180), me.y + fz * 10);
       this.fov += (c.fov + boostFov - this.fov) * (1 - Math.exp(-6 * dtSec));
     }
     this.camera.fov = this.fov;

@@ -1,3 +1,5 @@
+import { KART_RADIUS } from './constants.ts';
+
 // 맵 좌표와 물리 계산은 모두 타일 단위이다. 픽셀 변환은 렌더링에서만 한다.
 
 export interface Vec {
@@ -44,13 +46,29 @@ export interface MapData {
   checkpoints: Checkpoint[]; // 0번이 결승선이다.
   grid: GridSlot[];
   boostPads: BoostPad[];
-  decor: Decor[]; // 판정이 없는 장식이며 렌더링만 쓴다.
+  decor: Decor[]; // 트랙 밖 풍경과 충돌 방해물이다.
   wallColors: [number, number]; // 벽 타일에 번갈아 칠하는 두 색
   theme?: MapTheme;
   arrows?: FloorArrow[]; // 바닥에 칠하는 진행 방향 화살표이며 판정이 없다.
   branches?: Vec[][]; // 체크포인트 순서 밖 갈림길의 진행 방향 중심선이며 역주행 표시에만 쓴다.
   track?: CurvedTrack;
   signs?: WallSign[]; // 헤어핀 표지판은 자동으로 세우므로, 그 밖에 방향이 헷갈리는 곳만 적는다.
+  hills?: Hill[];
+}
+
+// 화면에만 보이는 언덕이며 물리 판정은 평면 그대로이다. 바다 맵에는 두지 않는다.
+export interface Hill extends Vec {
+  radius: number;
+  height: number;
+}
+
+export function heightAt(map: MapData, x: number, y: number): number {
+  let h = 0;
+  for (const hill of map.hills ?? []) {
+    const d = Math.hypot(x - hill.x, y - hill.y);
+    if (d < hill.radius) h += (hill.height * (1 + Math.cos((Math.PI * d) / hill.radius))) / 2;
+  }
+  return h;
 }
 
 // 닫힌 중심선에서 halfWidth 안쪽이 트랙이다.
@@ -73,8 +91,28 @@ export interface WallSign extends Vec {
   arrow: 'left' | 'right' | 'straight';
 }
 
+// 장식 종류별 scale 1일 때 모델 바닥 면적에 맞춘 충돌 반지름(타일)이다.
+export const DECOR_RADIUS = {
+  cone: 0.3, tires: 0.55, grandstand: 1.9, pit: 1.8, lightTower: 0.45, billboard: 0.9, flag: 0.25, balloons: 0.35,
+  shop: 1.6, streetTree: 0.55, lamp: 0.25, trafficLight: 0.25, planter: 0.45,
+  maple: 0.75, gate: 1.9, shrub: 0.75, bench: 0.6, leafPile: 0.6,
+  hut: 1.3, pine: 0.6, snowman: 0.5, snowdrift: 0.8, iceChunk: 0.45,
+  mesa: 1.8, cactus: 0.4, camp: 1.7, tent: 0.9, bush: 0.5, stake: 0.15, rock: 0.7,
+  iceberg: 1.8, icePillar: 0.7, floe: 1.3,
+};
+
+export type DecorType = keyof typeof DECOR_RADIUS;
+
 export interface Decor extends Vec {
-  type: 'cone' | 'tires';
+  type: DecorType;
+  radius: number; // 카트 충돌에 쓰는 원의 반지름(타일)
+  angle?: number;
+  scale?: number;
+  variant?: number; // 같은 종류 안의 색·형태 변형 번호
+}
+
+export function decor(type: DecorType, x: number, y: number, scale = 1, angle = 0, variant = 0): Decor {
+  return { type, x, y, radius: DECOR_RADIUS[type] * scale, scale, angle, variant };
 }
 
 export type Surface = 'asphalt' | 'curb' | 'grass' | 'sand' | 'ice' | 'verge' | 'offroad' | 'wall' | 'sea';
@@ -168,7 +206,23 @@ export function validateMap(map: MapData): string[] {
   });
   map.decor.forEach((d, i) => {
     const s = surfaceAtPoint(map, d.x, d.y);
-    if (s !== 'grass' && s !== 'offroad' && s !== 'verge') errors.push(`장식 ${i}번이 트랙 밖 땅에 있지 않다`);
+    if (!Number.isFinite(d.radius) || d.radius <= 0) errors.push(`장식 ${i}번의 충돌 반경이 잘못됐다`);
+    if (d.x - d.radius < 0 || d.y - d.radius < 0 || d.x + d.radius > map.width || d.y + d.radius > map.height) {
+      errors.push(`장식 ${i}번이 맵 경계를 벗어난다`);
+    }
+    if (s === 'asphalt' || s === 'curb' || s === 'ice' || s === 'sand') errors.push(`장식 ${i}번이 주행 노면 위에 있다`);
+    if (map.track) {
+      const c = nearestOnTrack(map.track, d.x, d.y);
+      if (c.d <= c.halfWidth + d.radius + KART_RADIUS + 0.05) errors.push(`장식 ${i}번이 트랙과 겹친다`);
+    }
+    map.decor.slice(0, i).forEach((other, j) => {
+      if (Math.hypot(d.x - other.x, d.y - other.y) <= d.radius + other.radius) errors.push(`장식 ${i}번이 ${j}번 장식과 겹친다`);
+    });
+    if (map.boostPads.some((p) => {
+      const x = Math.max(p.x, Math.min(d.x, p.x + p.w));
+      const y = Math.max(p.y, Math.min(d.y, p.y + p.h));
+      return Math.hypot(x - d.x, y - d.y) <= d.radius;
+    })) errors.push(`장식 ${i}번이 부스트 패드와 겹친다`);
   });
   return errors.map((e) => `[${map.id}] ${e}`);
 }

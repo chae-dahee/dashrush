@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { DRIFT_END_MIN_SEC, FALL_SEC, nearestOnTrack, surfaceAt, VERGE_WIDTH, type CurvedTrack, type MapData, type Vec, type WallSign } from '@dashrush/shared';
+import { DRIFT_END_MIN_SEC, FALL_SEC, heightAt, nearestOnTrack, surfaceAt, VERGE_WIDTH, type CurvedTrack, type MapData, type Vec, type WallSign } from '@dashrush/shared';
 
 // 물리 좌표 (x, y)는 장면의 (x, 0, y)이고 1 단위가 1 타일이다.
 // 캐주얼 카툰 톤의 임시 모형이며 4단계에서 에셋으로 교체한다.
@@ -23,10 +23,10 @@ export interface ViewKart {
 const LAYER_GAP = 0.003;
 const BUMP_SPEED_DROP = 2.5; // 한 프레임에 이만큼 속력이 떨어지면 부딪힌 것으로 본다.
 
-const OUTLINE = 0x2b2340;
+export const OUTLINE = 0x2b2340;
 const TEX_PX = 32; // 바닥 텍스처의 타일당 픽셀 수
 const WALL_HEIGHT = 0.7;
-const SEA_DEPTH = 1.2;
+export const SEA_DEPTH = 1.2;
 const SPAWN_BLINK_SEC = 0.12;
 const SEA_COLOR = 0x3a8fd6;
 const CLIFF_COLOR = 0x8a96a8;
@@ -237,13 +237,13 @@ export function buildTrack(map: MapData, renderer: THREE.WebGLRenderer): THREE.G
   const texture = new THREE.CanvasTexture(drawFloorCanvas(map, TEX_PX, sea));
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(map.width, map.height),
-    new THREE.MeshBasicMaterial({ map: texture, alphaTest: 0.5 }),
-  );
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.set(map.width / 2, 0, map.height / 2);
-  group.add(floor);
+  const [segX, segY] = map.hills ? [map.width * 2, map.height * 2] : [1, 1];
+  const floorGeo = new THREE.PlaneGeometry(map.width, map.height, segX, segY);
+  floorGeo.rotateX(-Math.PI / 2);
+  floorGeo.translate(map.width / 2, 0, map.height / 2);
+  const pos = floorGeo.attributes.position;
+  for (let i = 0; i < pos.count; i++) pos.setY(i, heightAt(map, pos.getX(i), pos.getZ(i)));
+  group.add(new THREE.Mesh(floorGeo, new THREE.MeshBasicMaterial({ map: texture, alphaTest: 0.5 })));
 
   if (sea) group.add(cliffs(map));
   const t = map.track;
@@ -254,7 +254,7 @@ export function buildTrack(map: MapData, renderer: THREE.WebGLRenderer): THREE.G
       ...(t.lanes ?? []).map((l): [Vec[], boolean, number] => [l.line, false, t.halfWidth]),
       ...(t.bridges ?? []).map((b): [Vec[], boolean, number] => [b.line, false, b.halfWidth]),
     ];
-    for (const [line, closed, hw] of lines) for (const side of [1, -1]) group.add(edgeStrip(t, line, closed, hw, side, top, bottom, color));
+    for (const [line, closed, hw] of lines) for (const side of [1, -1]) group.add(edgeStrip(map, t, line, closed, hw, side, top, bottom, color));
   }
 
   // 벽 타일은 InstancedMesh 하나로 그리므로 모두 같은 상자 모양이어야 한다.
@@ -265,18 +265,17 @@ export function buildTrack(map: MapData, renderer: THREE.WebGLRenderer): THREE.G
   const wallMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, WALL_HEIGHT, 1), toon(map.wallColors[0]), walls.length);
   const m = new THREE.Matrix4();
   walls.forEach(([x, y], i) => {
-    m.makeTranslation(x + 0.5, WALL_HEIGHT / 2, y + 0.5);
+    m.makeTranslation(x + 0.5, WALL_HEIGHT / 2 + heightAt(map, x + 0.5, y + 0.5), y + 0.5);
     wallMesh.setMatrixAt(i, m);
   });
   group.add(wallMesh);
 
-  for (const s of [...hairpinSigns(map), ...(map.signs ?? [])]) group.add(sign(s));
-  for (const d of map.decor) group.add(d.type === 'cone' ? cone(d.x, d.y) : tires(d.x, d.y));
+  for (const s of [...hairpinSigns(map), ...(map.signs ?? [])]) group.add(sign(s, heightAt(map, s.x, s.y)));
   return group;
 }
 
 // 중심선 한쪽 가장자리를 따라 세운 벽(또는 절벽) 면이다. 교차로·갈래길·지름길처럼 다른 트랙 안에 들어간 구간은 뺀다.
-function edgeStrip(t: CurvedTrack, line: Vec[], closed: boolean, hw: number, side: number, top: number, bottom: number, color: number): THREE.Mesh {
+function edgeStrip(map: MapData, t: CurvedTrack, line: Vec[], closed: boolean, hw: number, side: number, top: number, bottom: number, color: number): THREE.Mesh {
   const n = line.length;
   const segs = closed ? n : n - 1;
   const pos: number[] = [];
@@ -288,7 +287,8 @@ function edgeStrip(t: CurvedTrack, line: Vec[], closed: boolean, hw: number, sid
     const len = Math.hypot(b.x - a.x, b.y - a.y);
     const x = p.x - ((b.y - a.y) / len) * hw * side;
     const z = p.y + ((b.x - a.x) / len) * hw * side;
-    pos.push(x, top, z, x, bottom, z);
+    const h = heightAt(map, x, z);
+    pos.push(x, top + h, z, x, bottom + h, z);
     const c = nearestOnTrack(t, x, z);
     open.push(c.d < c.halfWidth - 0.05);
   }
@@ -400,7 +400,7 @@ function signTexture(arrow: WallSign['arrow']): THREE.CanvasTexture {
   return texture;
 }
 
-function sign(s: WallSign): THREE.Group {
+function sign(s: WallSign, ground: number): THREE.Group {
   const g = new THREE.Group();
   const board = new THREE.Mesh(
     new THREE.PlaneGeometry(1.6, 0.8),
@@ -410,34 +410,8 @@ function sign(s: WallSign): THREE.Group {
   const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, WALL_HEIGHT + 0.05, 8), toon(OUTLINE));
   pole.position.y = (WALL_HEIGHT + 0.05) / 2;
   g.add(board, pole);
-  g.position.set(s.x, 0, s.y);
+  g.position.set(s.x, ground, s.y);
   g.rotation.y = Math.atan2(-Math.cos(s.dir), -Math.sin(s.dir));
-  return g;
-}
-
-function cone(x: number, y: number): THREE.Group {
-  const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.5, 12), toon(0xff7a1a));
-  body.position.y = 0.25;
-  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.14, 0.08, 12), toon(0xffffff));
-  band.position.y = 0.26;
-  const base = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.04, 0.42), toon(0xff7a1a));
-  base.position.y = 0.02;
-  g.add(body, band, base);
-  g.position.set(x, 0, y);
-  return g;
-}
-
-function tires(x: number, y: number): THREE.Group {
-  const g = new THREE.Group();
-  const geometry = new THREE.TorusGeometry(0.24, 0.1, 8, 16);
-  for (let i = 0; i < 3; i++) {
-    const t = new THREE.Mesh(geometry, toon(i === 1 ? 0xffffff : 0x2b2340));
-    t.rotation.x = Math.PI / 2;
-    t.position.y = 0.1 + i * 0.19;
-    g.add(t);
-  }
-  g.position.set(x, 0, y);
   return g;
 }
 
@@ -508,10 +482,12 @@ export class KartModel {
   }
 
   // 반환값이 true이면 이번 갱신에서 부딪혔다고 본다. 효과음 판단에 쓴다.
-  update(k: ViewKart, time: number, dtSec: number): boolean {
+  update(k: ViewKart, time: number, dtSec: number, map: MapData): boolean {
     const sink = k.fallLeft > 0 ? 1 - k.fallLeft / FALL_SEC : 0;
-    this.root.position.set(k.x, this.layer * LAYER_GAP - sink * SEA_DEPTH, k.y);
-    this.root.rotation.y = -k.angle;
+    const fx = Math.cos(k.angle) / 2, fy = Math.sin(k.angle) / 2;
+    const pitch = Math.atan(heightAt(map, k.x + fx, k.y + fy) - heightAt(map, k.x - fx, k.y - fy));
+    this.root.position.set(k.x, heightAt(map, k.x, k.y) + this.layer * LAYER_GAP - sink * SEA_DEPTH, k.y);
+    this.root.rotation.set(0, -k.angle, pitch, 'YZX');
     this.root.visible = k.spawnLeft === 0 || Math.floor(k.spawnLeft / SPAWN_BLINK_SEC) % 2 === 0;
 
     if (k.ghost !== this.ghost) {

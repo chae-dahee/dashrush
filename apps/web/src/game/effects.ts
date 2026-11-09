@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { surfaceAtPoint, type MapData } from '@dashrush/shared';
+import { heightAt, surfaceAtPoint, type MapData } from '@dashrush/shared';
 import type { ViewKart } from './scene.ts';
 
 // 효과는 서버와 무관하게 각 클라이언트가 카트 상태(드리프트·노면·충돌)만 보고 만든다.
@@ -97,7 +97,7 @@ export class Effects {
       let n = (this.dustCarry.get(k.id) ?? 0) + DUST_RATE * dtSec;
       for (; n >= 1; n--) {
         const p = at(0.45 + Math.random() * 0.2, (Math.random() - 0.5) * 0.6);
-        this.dust.spawn(p.x, 0.1, p.y, DUST_COLORS[surface], 0.6, new THREE.Vector3(0, 0.6, 0), 1.5);
+        this.dust.spawn(p.x, heightAt(this.map, p.x, p.y) + 0.1, p.y,DUST_COLORS[surface], 0.6, new THREE.Vector3(0, 0.6, 0), 1.5);
       }
       this.dustCarry.set(k.id, n);
     }
@@ -108,7 +108,7 @@ export class Effects {
       if (!last || Math.hypot(k.x - last.x, k.y - last.y) >= SKID_STEP) {
         for (const side of [0.32, -0.32]) {
           const p = at(0.3, side);
-          this.skids.spawn(p.x, 0.012, p.y, 0x2b2340, 3).mesh.rotation.z = -k.angle + Math.PI / 2;
+          this.skids.spawn(p.x, heightAt(this.map, p.x, p.y) + 0.012, p.y,0x2b2340, 3).mesh.rotation.z = -k.angle + Math.PI / 2;
         }
         this.lastSkid.set(k.id, { x: k.x, y: k.y });
       }
@@ -122,7 +122,7 @@ export class Effects {
       for (let i = 0; i < SPARK_COUNT; i++) {
         const a = Math.random() * Math.PI * 2;
         const vel = new THREE.Vector3(Math.cos(a) * 2, 1.5 + Math.random() * 1.5, Math.sin(a) * 2);
-        this.sparks.spawn(p.x, 0.3, p.y, SPARK_COLORS[i % SPARK_COLORS.length], 0.4, vel);
+        this.sparks.spawn(p.x, heightAt(this.map, p.x, p.y) + 0.3, p.y,SPARK_COLORS[i % SPARK_COLORS.length], 0.4, vel);
       }
     }
   }

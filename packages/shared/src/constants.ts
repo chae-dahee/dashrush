@@ -49,6 +49,7 @@ export const WALL_MIN_BOUNCE = 2; // 벽을 민 뒤 바깥으로 튕겨 나가�
 export const WALL_SCRAPE_MAX = 0.5; // 이보다 약하게 미는 것은 벽을 스치는 것으로 보고 튕기지 않는다(타일/초).
 export const WALL_TURN_MAX = 0.35; // 벽을 밀 때마다 벽을 따라가는 쪽으로 틀어 주는 최대 각도(라디안)
 export const FALL_SEC = 1.5;
+export const OFFROAD_RESPAWN_SEC = 3;
 export const SPAWN_GHOST_SEC = 1.5;
 
 export const MAX_PLAYERS = 8;
