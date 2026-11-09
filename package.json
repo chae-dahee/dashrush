@@ -2,9 +2,12 @@
   "name": "dashrush",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@12.15.0",
   "scripts": {
     "dev:server": "pnpm --filter @dashrush/server dev",
     "dev:web": "pnpm --filter @dashrush/web dev",
+    "build": "pnpm --filter @dashrush/web build",
+    "start": "pnpm --filter @dashrush/server start",
     "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {

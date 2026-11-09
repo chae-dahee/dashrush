@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { MAPS } from '@dashrush/shared';
 import { LocalRace, type RaceHud } from '../game/LocalRace.ts';
 import type { ViewMode } from '../game/RaceView.ts';
-import { buttonStyle, formatMs, RaceShell, updateGauge } from './RaceShell.tsx';
+import { formatMs, RaceShell, updateGauge } from './RaceShell.tsx';
 
 export function SoloRace({ mapId, onExit }: { mapId: string; onExit: () => void }) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -54,31 +54,31 @@ export function SoloRace({ mapId, onExit }: { mapId: string; onExit: () => void 
           <div>
             <span ref={timeRef}>0:00.00</span>
           </div>
-          <div style={{ fontSize: 14 }}>
+          <div style={{ fontSize: '0.7em' }}>
             최근 {formatMs(hud?.lastLapMs ?? null)} · 최고 {formatMs(hud?.bestLapMs ?? null)}
           </div>
         </>
       }
       overlay={
         hud?.finishedMs != null && (
-          <>
-            <div style={{ fontSize: 36, fontWeight: 900 }}>FINISH!</div>
-            <div>기록 {formatMs(hud.finishedMs)}</div>
-            <div>최고 랩 {formatMs(hud.bestLapMs)}</div>
-            {hud.record?.newRace && <div style={{ color: '#e8452c' }}>개인 최고 기록 갱신!</div>}
-            {hud.record?.newLap && <div style={{ color: '#e8452c' }}>개인 최고 랩 갱신!</div>}
-            <div style={{ fontSize: 13 }}>
+          <div className="stack">
+            <div className="logo small">FINISH!</div>
+            <div className="title">{formatMs(hud.finishedMs)}</div>
+            <span className="muted">이번 최고 랩 {formatMs(hud.bestLapMs)}</span>
+            {hud.record?.newRace && <div className="bubble warn">개인 최고 기록을 갱신했습니다!</div>}
+            {hud.record?.newLap && <div className="bubble warn">개인 최고 랩을 갱신했습니다!</div>}
+            <span className="muted">
               개인 최고 {formatMs(hud.record?.bestRaceMs ?? null)} · 최고 랩 {formatMs(hud.record?.bestLapMs ?? null)}
-            </div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-              <button style={buttonStyle} onClick={() => raceRef.current?.restart()}>
+            </span>
+            <div className="row" style={{ justifyContent: 'center' }}>
+              <button className="btn primary" onClick={() => raceRef.current?.restart()}>
                 다시 달리기
               </button>
-              <button style={buttonStyle} onClick={onExit}>
+              <button className="btn" onClick={onExit}>
                 로비로
               </button>
             </div>
-          </>
+          </div>
         )
       }
     />

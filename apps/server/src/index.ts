@@ -1,8 +1,9 @@
 import type { Server as HttpServer } from 'node:http';
 import { serve } from '@hono/node-server';
+import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { Server } from 'socket.io';
-import { EVENT_RATE_MAX, MAPS, validateMap, type ClientToServerEvents, type ServerToClientEvents, type SocketData } from '@dashrush/shared';
+import { EVENT_RATE_MAX, MAPS, MAX_PLAYERS, QUICK_SIZE_MIN, validateMap, type ClientToServerEvents, type ServerToClientEvents, type SocketData } from '@dashrush/shared';
 import { authApi, tokenFromCookieHeader, verifyToken } from './auth.ts';
 import { delayed, LAG_MS, PORT } from './env.ts';
 import { createRoom, findRoom, quickMatch, RoomError, roomOf, validConfig, type GameServer } from './room.ts';
@@ -13,6 +14,7 @@ if (mapErrors.length) throw new Error(mapErrors.join('\n'));
 const app = new Hono();
 app.route('/api', authApi);
 app.get('/api/health', (c) => c.json({ ok: true }));
+app.use('*', serveStatic({ root: '../web/dist' }));
 
 const httpServer = serve({ fetch: app.fetch, port: PORT }, (info) => {
   console.log(`server listening on :${info.port}${LAG_MS ? ` (인위적 지연 ${LAG_MS}ms)` : ''}`);
@@ -78,7 +80,16 @@ io.on('connection', (socket) => {
       roomOf(userId)?.config(userId, p);
     }),
   );
-  socket.on('room:quickMatch', () => handle(() => quickMatch(io, socket)));
+  socket.on('room:quickMatch', (p) =>
+    handle(() => {
+      const size = p?.size;
+      if (!Number.isInteger(size) || size < QUICK_SIZE_MIN || size > MAX_PLAYERS) invalid();
+      quickMatch(io, socket, size);
+    }),
+  );
+  socket.on('room:ready', (p) => {
+    if (typeof p?.ready === 'boolean') roomOf(userId)?.setReady(userId, p.ready);
+  });
   socket.on('room:team', (p) =>
     handle(() => {
       if (p?.team !== 'red' && p?.team !== 'blue') invalid();

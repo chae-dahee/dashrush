@@ -1,8 +1,18 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { MAPS, ROOM_CODE_LEN, type GuestInfo, type RoomState } from '@dashrush/shared';
-import { createGuest, fetchMe } from './net/api.ts';
-import { currentRtt, startClockSync } from './net/clock.ts';
+import {
+  MAPS,
+  MAX_PLAYERS,
+  NICKNAME_MAX,
+  NICKNAME_MIN,
+  QUICK_SIZE_MIN,
+  ROOM_CODE_LEN,
+  type GuestInfo,
+  type RoomState,
+} from '@dashrush/shared';
+import { createGuest, fetchMe, logout } from './net/api.ts';
+import { startClockSync } from './net/clock.ts';
 import { getSocket, resetSocket } from './net/socket.ts';
+import { MapPreview, Ping } from './screens/common.tsx';
 import { NetRaceScreen } from './screens/NetRaceScreen.tsx';
 import { RoomScreen } from './screens/RoomScreen.tsx';
 import { SoloRace } from './screens/SoloRace.tsx';
@@ -25,7 +35,16 @@ export function App() {
       />
     );
   }
-  return <Main guest={guest} />;
+  return (
+    <Main
+      guest={guest}
+      onLogout={async () => {
+        await logout();
+        resetSocket();
+        setGuest(null);
+      }}
+    />
+  );
 }
 
 const roomParam = () => new URLSearchParams(location.search).get('room');
@@ -38,7 +57,7 @@ function syncRoomParam(code: string | null) {
   history.replaceState(null, '', url);
 }
 
-function Main({ guest }: { guest: GuestInfo }) {
+function Main({ guest, onLogout }: { guest: GuestInfo; onLogout: () => void }) {
   const [soloMap, setSoloMap] = useState<string | null>(null);
   const [room, setRoom] = useState<RoomState | null>(null);
   const [connected, setConnected] = useState(false);
@@ -89,7 +108,7 @@ function Main({ guest }: { guest: GuestInfo }) {
   if (soloMap) return <SoloRace mapId={soloMap} onExit={() => setSoloMap(null)} />;
   if (room?.status === 'waiting') return <RoomScreen room={room} meId={guest.userId} error={error} onLeave={leave} />;
   if (room) return <NetRaceScreen key={room.raceStartsAt} room={room} meId={guest.userId} onLeave={leave} />;
-  return <Lobby guest={guest} connected={connected} error={error} onSolo={setSoloMap} />;
+  return <Lobby guest={guest} connected={connected} error={error} onSolo={setSoloMap} onLogout={onLogout} />;
 }
 
 function NicknameForm({ onDone }: { onDone: (g: GuestInfo) => void }) {
@@ -106,12 +125,24 @@ function NicknameForm({ onDone }: { onDone: (g: GuestInfo) => void }) {
   };
 
   return (
-    <form onSubmit={submit}>
-      <h1>DashRush</h1>
-      <input value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="닉네임" />
-      <button type="submit">시작</button>
-      {error && <p>{error}</p>}
-    </form>
+    <div className="page center">
+      <div className="logo">DashRush</div>
+      <form className="card stack" onSubmit={submit}>
+        <h2 className="title">닉네임을 정해 주세요</h2>
+        <input
+          className="input"
+          value={nickname}
+          onChange={(e) => setNickname(e.target.value)}
+          placeholder={`${NICKNAME_MIN}~${NICKNAME_MAX}자`}
+          maxLength={NICKNAME_MAX}
+          autoFocus
+        />
+        {error && <div className="bubble warn">{error}</div>}
+        <button type="submit" className="btn primary big">
+          출발!
+        </button>
+      </form>
+    </div>
   );
 }
 
@@ -120,16 +151,13 @@ interface LobbyProps {
   connected: boolean;
   error: string;
   onSolo: (mapId: string) => void;
+  onLogout: () => void;
 }
 
-function Lobby({ guest, connected, error, onSolo }: LobbyProps) {
-  const [ping, setPing] = useState<number | null>(null);
+function Lobby({ guest, connected, error, onSolo, onLogout }: LobbyProps) {
   const [code, setCode] = useState('');
-
-  useEffect(() => {
-    const timer = setInterval(() => setPing(Math.round(currentRtt())), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  const [quickSize, setQuickSize] = useState(4);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const create = () => {
     const map = MAPS.oval;
@@ -141,31 +169,81 @@ function Lobby({ guest, connected, error, onSolo }: LobbyProps) {
   };
 
   return (
-    <div>
-      <h1>DashRush</h1>
-      <p>{guest.nickname}</p>
-      <p>{connected ? `연결됨 · 핑 ${ping ?? '-'}ms` : '연결 중…'}</p>
-      <button disabled={!connected} onClick={() => getSocket().emit('room:quickMatch')}>
-        빠른 매칭
-      </button>
-      <button disabled={!connected} onClick={create}>
-        방 만들기
-      </button>
-      <form onSubmit={join}>
-        <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="방 코드" maxLength={ROOM_CODE_LEN} />
-        <button type="submit" disabled={!connected}>
-          입장
-        </button>
-      </form>
-      {error && <p>{error}</p>}
-      <p>
-        혼자 달리기{' '}
-        {Object.values(MAPS).map((m) => (
-          <button key={m.id} onClick={() => onSolo(m.id)}>
-            {m.name}
+    <div className="page">
+      <header className="topbar">
+        <div className="logo small">DashRush</div>
+        <div className="row">
+          <div className="menu">
+            <button className="badge sun" onClick={() => setMenuOpen(!menuOpen)}>
+              {guest.nickname} ▾
+            </button>
+            {menuOpen && (
+              <div className="bubble">
+                <button className="btn small" onClick={onLogout}>
+                  로그아웃
+                </button>
+              </div>
+            )}
+          </div>
+          {connected ? <Ping /> : <span className="badge">연결 중…</span>}
+        </div>
+      </header>
+      {error && <div className="bubble warn">{error}</div>}
+
+      <div className="grid">
+        <section className="card stack">
+          <h2 className="title">빠른 매칭</h2>
+          <p className="muted">고른 인원에서 모자란 자리는 봇이 채웁니다.</p>
+          <div className="pills">
+            {Array.from({ length: MAX_PLAYERS - QUICK_SIZE_MIN + 1 }, (_, i) => QUICK_SIZE_MIN + i).map((n) => (
+              <button key={n} className={`pill ${n === quickSize ? 'on' : ''}`} onClick={() => setQuickSize(n)}>
+                {n}명
+              </button>
+            ))}
+          </div>
+          <button
+            className="btn primary big"
+            disabled={!connected}
+            onClick={() => getSocket().emit('room:quickMatch', { size: quickSize })}
+          >
+            빠른 매칭
           </button>
-        ))}
-      </p>
+        </section>
+
+        <section className="card stack">
+          <h2 className="title">방 만들기</h2>
+          <p className="muted">방을 만들고 초대 링크로 친구를 부릅니다.</p>
+          <button className="btn big" disabled={!connected} onClick={create}>
+            방 만들기
+          </button>
+        </section>
+
+        <form className="card stack" onSubmit={join}>
+          <h2 className="title">코드로 입장</h2>
+          <input
+            className="input code"
+            value={code}
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            placeholder="방 코드"
+            maxLength={ROOM_CODE_LEN}
+          />
+          <button type="submit" className="btn big" disabled={!connected || code.length !== ROOM_CODE_LEN}>
+            입장
+          </button>
+        </form>
+      </div>
+
+      <section className="card wide stack">
+        <h2 className="title">혼자 달리기</h2>
+        <div className="map-cards">
+          {Object.values(MAPS).map((m) => (
+            <button key={m.id} className="map-card" onClick={() => onSolo(m.id)}>
+              <MapPreview mapId={m.id} />
+              {m.name}
+            </button>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

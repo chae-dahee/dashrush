@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { MAPS, RESULTS_MS, type RoomState } from '@dashrush/shared';
+import { MAPS, RESULTS_MS, TEAM_COLORS, type RoomState } from '@dashrush/shared';
 import { NetRace, type NetHud, type NetResult } from '../game/NetRace.ts';
 import type { ViewMode } from '../game/RaceView.ts';
-import { currentRtt } from '../net/clock.ts';
 import { getSocket } from '../net/socket.ts';
+import { hex, Ping } from './common.tsx';
 import { formatMs, RaceShell, TEAM_NAMES, updateGauge } from './RaceShell.tsx';
 
 interface Props {
@@ -24,12 +24,6 @@ export function NetRaceScreen({ room, meId, onLeave }: Props) {
   const [view, setView] = useState<ViewMode>('third');
   const [wrongWay, setWrongWay] = useState(false);
   const [result, setResult] = useState<NetResult | null>(null);
-  const [ping, setPing] = useState(0);
-
-  useEffect(() => {
-    const timer = setInterval(() => setPing(Math.round(currentRtt())), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   // 경주 하나가 화면 하나이다. 경주 중 방 정보가 바뀌어도 장면을 새로 만들지 않는다.
   useEffect(() => {
@@ -61,6 +55,8 @@ export function NetRaceScreen({ room, meId, onLeave }: Props) {
     raceRef.current?.setPlayers(room.players);
   }, [room.players]);
 
+  const wins = new Map(room.players.map((p) => [p.id, p.wins]));
+
   return (
     <RaceShell
       hostRef={hostRef}
@@ -80,16 +76,16 @@ export function NetRaceScreen({ room, meId, onLeave }: Props) {
             <span ref={timeRef}>0:00.00</span>
           </div>
           {hud?.red != null && (
-            <div style={{ fontSize: 16 }}>
+            <div style={{ fontSize: '0.8em' }}>
               <span style={{ color: '#ff8080' }}>레드 {hud.red}</span> : <span style={{ color: '#8fb4ff' }}>{hud.blue} 블루</span>
             </div>
           )}
-          <div ref={limitRef} style={{ fontSize: 14, color: '#ffc83d' }} />
-          <div style={{ fontSize: 12, opacity: 0.8 }}>핑 {ping}ms</div>
+          <div ref={limitRef} style={{ fontSize: '0.7em', color: '#ffc83d' }} />
+          <Ping />
           {room.players
             .filter((p) => !p.connected)
             .map((p) => (
-              <div key={p.id} style={{ fontSize: 12, color: '#ffb3b3' }}>
+              <div key={p.id} style={{ fontSize: '0.6em', color: '#ffb3b3' }}>
                 {p.nickname} 연결 끊김
               </div>
             ))}
@@ -97,39 +93,46 @@ export function NetRaceScreen({ room, meId, onLeave }: Props) {
       }
       overlay={
         result ? (
-          <>
-            <div style={{ fontSize: 28, fontWeight: 900 }}>결과</div>
+          <div className="stack">
+            <h2 className="title">결과</h2>
             {result.teamScores && (
-              <div style={{ fontSize: 20 }}>
-                레드 {result.teamScores.red} : {result.teamScores.blue} 블루
-                {result.winner && ` · ${TEAM_NAMES[result.winner]} 승리`}
+              <div className="row" style={{ justifyContent: 'center', fontSize: 20 }}>
+                <span className="chip" style={{ background: hex(TEAM_COLORS.red[0]) }} />
+                {TEAM_NAMES.red} {result.teamScores.red} : {result.teamScores.blue} {TEAM_NAMES.blue}
+                <span className="chip" style={{ background: hex(TEAM_COLORS.blue[0]) }} />
+                {result.winner && <span className="badge sun">{TEAM_NAMES[result.winner]} 승리</span>}
               </div>
             )}
-            <table style={{ margin: '8px auto', borderSpacing: '12px 2px' }}>
-              <tbody>
-                {result.ranking.map((r, i) => (
-                  <tr key={r.id} style={{ fontWeight: r.id === meId ? 900 : 600 }}>
-                    <td>{i + 1}</td>
-                    <td>{r.nickname}</td>
-                    <td>{r.timeMs === null ? 'DNF' : formatMs(r.timeMs)}</td>
-                    <td style={{ fontSize: 13 }}>최고 랩 {formatMs(r.bestLapMs)}</td>
-                    {r.points !== undefined && <td>{r.points}점</td>}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {result.record?.newRace && <div style={{ color: '#e8452c' }}>개인 최고 기록 갱신!</div>}
-            {result.record?.newLap && <div style={{ color: '#e8452c' }}>개인 최고 랩 갱신!</div>}
-            <div style={{ fontSize: 13 }}>{RESULTS_MS / 1000}초 뒤 대기실로 돌아갑니다.</div>
-          </>
+            <ol className="ranking">
+              {result.ranking.map((r, i) => (
+                <li key={r.id} className={r.id === meId ? 'me' : ''}>
+                  <span className={`rank ${i < 3 && r.timeMs !== null ? 'top' : ''}`}>{i + 1}</span>
+                  <span className="name">
+                    {r.nickname} {(wins.get(r.id) ?? 0) > 0 && <span className="badge">{wins.get(r.id)}승</span>}
+                    <br />
+                    <span className="muted">최고 랩 {formatMs(r.bestLapMs)}</span>
+                  </span>
+                  <span className="time">{r.timeMs === null ? 'DNF' : formatMs(r.timeMs)}</span>
+                  {r.points !== undefined && <span className="badge">{r.points}점</span>}
+                </li>
+              ))}
+            </ol>
+            {result.record?.newRace && <div className="bubble warn">개인 최고 기록을 갱신했습니다!</div>}
+            {result.record?.newLap && <div className="bubble warn">개인 최고 랩을 갱신했습니다!</div>}
+            <span className="muted">{RESULTS_MS / 1000}초 뒤 대기실로 돌아갑니다.</span>
+            <div className="progress">
+              <div style={{ animationDuration: `${RESULTS_MS}ms` }} />
+            </div>
+          </div>
         ) : (
           hud?.finishMs != null && (
-            <>
-              <div style={{ fontSize: 36, fontWeight: 900 }}>FINISH!</div>
-              <div>
+            <div className="stack">
+              <div className="logo small">FINISH!</div>
+              <div className="title">
                 {hud.rank}위 · {formatMs(hud.finishMs)}
               </div>
-            </>
+              <div className="bubble">다른 참가자를 기다리는 중입니다.</div>
+            </div>
           )
         )
       }

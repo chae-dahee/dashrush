@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { surfaceAt, type MapData } from '@dashrush/shared';
+import { surfaceAtPoint, type MapData } from '@dashrush/shared';
 import type { ViewKart } from './scene.ts';
 
 // 효과는 서버와 무관하게 각 클라이언트가 카트 상태(드리프트·노면·충돌)만 보고 만든다.
@@ -54,10 +54,12 @@ class Pool {
 
 const DUST_RATE = 18; // 카트 한 대가 초당 내는 먼지 수
 const DUST_MIN_SPEED = 2;
-const DUST_COLORS = { grass: 0x9fd77a, sand: 0xe8c879 } as const;
+const DUST_COLORS = { grass: 0x9fd77a, sand: 0xe8c879, verge: 0x9fd77a, offroad: 0x9fd77a } as const;
 const SKID_STEP = 0.15; // 스키드 자국 조각 사이 거리(타일)
 const SPARK_COUNT = 10;
 const SPARK_COLORS = [0xffe14d, 0xffffff, 0xff9a2e];
+const SPLASH_COUNT = 14;
+const SPLASH_COLORS = [0xffffff, 0x9fd8ff, 0x5fb4f0];
 
 export class Effects {
   private dust: Pool;
@@ -65,6 +67,7 @@ export class Effects {
   private sparks: Pool;
   private dustCarry = new Map<string, number>();
   private lastSkid = new Map<string, { x: number; y: number }>();
+  private falling = new Set<string>();
 
   constructor(scene: THREE.Scene, private map: MapData) {
     this.dust = new Pool(scene, new THREE.SphereGeometry(0.12, 6, 4), 80);
@@ -73,12 +76,24 @@ export class Effects {
   }
 
   kart(k: ViewKart, hit: boolean, dtSec: number) {
+    if (k.fallLeft > 0) {
+      if (!this.falling.has(k.id)) {
+        this.falling.add(k.id);
+        for (let i = 0; i < SPLASH_COUNT; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const vel = new THREE.Vector3(Math.cos(a) * 1.5, 2 + Math.random() * 2, Math.sin(a) * 1.5);
+          this.sparks.spawn(k.x, 0, k.y, SPLASH_COLORS[i % SPLASH_COLORS.length], 0.6, vel);
+        }
+      }
+      return;
+    }
+    this.falling.delete(k.id);
     if (k.ghost) return;
     const fx = Math.cos(k.angle), fy = Math.sin(k.angle);
     const at = (back: number, side: number) => ({ x: k.x - fx * back - fy * side, y: k.y - fy * back + fx * side });
 
-    const surface = surfaceAt(this.map, Math.floor(k.x), Math.floor(k.y));
-    if ((surface === 'grass' || surface === 'sand') && k.speed >= DUST_MIN_SPEED) {
+    const surface = surfaceAtPoint(this.map, k.x, k.y);
+    if ((surface === 'grass' || surface === 'sand' || surface === 'verge' || surface === 'offroad') && k.speed >= DUST_MIN_SPEED) {
       let n = (this.dustCarry.get(k.id) ?? 0) + DUST_RATE * dtSec;
       for (; n >= 1; n--) {
         const p = at(0.45 + Math.random() * 0.2, (Math.random() - 0.5) * 0.6);
