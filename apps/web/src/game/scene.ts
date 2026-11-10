@@ -1,5 +1,16 @@
 import * as THREE from 'three';
-import { DRIFT_END_MIN_SEC, FALL_SEC, heightAt, nearestOnTrack, surfaceAt, VERGE_WIDTH, type CurvedTrack, type MapData, type Vec, type WallSign } from '@dashrush/shared';
+import {
+  DRIFT_END_MIN_SEC,
+  FALL_SEC,
+  heightAt,
+  nearestOnTrack,
+  surfaceAt,
+  VERGE_WIDTH,
+  type CurvedTrack,
+  type MapData,
+  type Vec,
+  type WallSign,
+} from '@dashrush/shared';
 
 // 물리 좌표 (x, y)는 장면의 (x, 0, y)이고 1 단위가 1 타일이다.
 // 캐주얼 카툰 톤의 임시 모형이며 4단계에서 에셋으로 교체한다.
@@ -65,6 +76,22 @@ function floorColors(map: MapData): typeof FLOOR_COLORS {
 
 const hasSea = (map: MapData) => map.tiles.some((row) => row.includes('~'));
 
+const FALL_GRAVITY = 6; // 바다로 떨어지는 카트를 그릴 때의 중력 가속도(타일/초²)
+const FALL_NOSE_RATE = 1.2; // 떨어지는 동안 앞코를 숙이는 속도(라디안/초)
+const FALL_NOSE_MAX = 0.9;
+
+// 바다에 빠진 카트가 지면에서 내려간 거리이다. 트랙 밖 3초 리스폰은 바다가 없는 맵에서만 일어나므로 바다 맵의 낙하는 모두 바다 낙하이다.
+export function fallDrop(map: MapData, k: ViewKart): number {
+  if (k.fallLeft === 0 || !hasSea(map)) return 0;
+  const t = FALL_SEC - k.fallLeft;
+  return (FALL_GRAVITY * t * t) / 2;
+}
+
+// 0~1 균등 난수를 정해진 순서로 내므로 같은 맵은 늘 같은 무늬를 그린다.
+function seeded(seed: number) {
+  return () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+}
+
 let toonGradient: THREE.DataTexture | null = null;
 
 // 3단계 명암으로 툰 느낌을 낸다.
@@ -80,8 +107,8 @@ function gradient(): THREE.DataTexture {
 
 export const toon = (color: number) => new THREE.MeshToonMaterial({ color, gradientMap: gradient() });
 
-// clearSea이면 바다 타일을 투명하게 남겨, 아래에 까는 바다 평면이 보이게 한다.
-export function drawFloorCanvas(map: MapData, px: number, clearSea = false): HTMLCanvasElement {
+// forScene이면 바다 타일을 투명하게 남겨, 아래에 까는 바다 평면이 보이게 한다.
+export function drawFloorCanvas(map: MapData, px: number, forScene = false): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = map.width * px;
   canvas.height = map.height * px;
@@ -97,7 +124,7 @@ export function drawFloorCanvas(map: MapData, px: number, clearSea = false): HTM
           ctx.fillRect(x * px, y * px, px, px);
         }
       }
-    } else if (!clearSea) {
+    } else if (!forScene) {
       ctx.fillStyle = colors.sea;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
@@ -137,12 +164,13 @@ export function drawFloorCanvas(map: MapData, px: number, clearSea = false): HTM
       b.line.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x * px, p.y * px) : ctx.lineTo(p.x * px, p.y * px)));
       ctx.stroke();
     }
+    if (track.surface === 'ice' && track.outside === 'sea') iceMarks(ctx, track, px);
   }
 
   for (let y = 0; y < map.height; y++) {
     for (let x = 0; x < map.width; x++) {
       const s = surfaceAt(map, x, y);
-      if (s === 'sea' && clearSea) continue;
+      if (s === 'sea' && forScene) continue;
       if (track && s !== 'sand') continue;
       ctx.fillStyle =
         s === 'wall'
@@ -217,27 +245,64 @@ export function drawFloorCanvas(map: MapData, px: number, clearSea = false): HTM
     ctx.stroke();
     ctx.restore();
   }
+
   return canvas;
+}
+
+// 빙판 위 얕은 금과 하이라이트 줄이다. 이미 칠한 곳에만 그려 바다로 삐져나가지 않는다.
+function iceMarks(ctx: CanvasRenderingContext2D, track: CurvedTrack, px: number) {
+  const rand = seeded(7);
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-atop';
+  ctx.lineCap = 'round';
+  const line = track.line;
+  for (let i = 0; i < line.length; i += 2) {
+    const a = line[i], b = line[(i + 1) % line.length];
+    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const ux = (b.x - a.x) / len, uy = (b.y - a.y) / len;
+    const off = (rand() * 2 - 1) * track.halfWidth * 0.8;
+    let x = a.x - uy * off, y = a.y + ux * off;
+    if (rand() < 0.5) {
+      const l = 1.5 + rand() * 2;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+      ctx.lineWidth = px / 8;
+      ctx.beginPath();
+      ctx.moveTo(x * px, y * px);
+      ctx.lineTo((x + ux * l) * px, (y + uy * l) * px);
+      ctx.stroke();
+    } else {
+      ctx.strokeStyle = 'rgba(70, 140, 190, 0.45)';
+      ctx.lineWidth = px / 18;
+      ctx.beginPath();
+      ctx.moveTo(x * px, y * px);
+      for (let k = 0; k < 3; k++) {
+        const angle = rand() * Math.PI * 2, l = 0.2 + rand() * 0.4;
+        x += Math.cos(angle) * l;
+        y += Math.sin(angle) * l;
+        ctx.lineTo(x * px, y * px);
+      }
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
 }
 
 export function buildTrack(map: MapData, renderer: THREE.WebGLRenderer): THREE.Group {
   const group = new THREE.Group();
   const sea = hasSea(map);
 
-  // 맵 바깥이 허공으로 보이지 않도록 넓은 땅을 깐다. 바다 맵은 절벽 아래 바다를 깐다.
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(1, 1),
-    new THREE.MeshBasicMaterial({ color: sea ? map.theme?.sea ?? SEA_COLOR : map.theme?.ground ?? GROUND_COLOR }),
-  );
-  ground.rotation.x = -Math.PI / 2;
-  ground.scale.set(map.width * 6, map.height * 6, 1);
-  ground.position.set(map.width / 2, sea ? -SEA_DEPTH : -0.02, map.height / 2);
-  group.add(ground);
+  if (sea) {
+    const seaGeo = new THREE.PlaneGeometry(map.width, map.height);
+    seaGeo.rotateX(-Math.PI / 2);
+    seaGeo.translate(map.width / 2, -SEA_DEPTH, map.height / 2);
+    group.add(new THREE.Mesh(seaGeo, new THREE.MeshBasicMaterial({ color: map.theme?.sea ?? SEA_COLOR })));
+  }
+  group.add(skirt(map, sea));
 
-  const texture = new THREE.CanvasTexture(drawFloorCanvas(map, TEX_PX, sea));
+  const texture = new THREE.CanvasTexture(drawFloorCanvas(map, TEX_PX, true));
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const [segX, segY] = map.hills ? [map.width * 2, map.height * 2] : [1, 1];
+  const [segX, segY] = map.hills || map.track?.lanes?.some((l) => l.cut) ? [map.width * 2, map.height * 2] : [1, 1];
   const floorGeo = new THREE.PlaneGeometry(map.width, map.height, segX, segY);
   floorGeo.rotateX(-Math.PI / 2);
   floorGeo.translate(map.width / 2, 0, map.height / 2);
@@ -248,13 +313,17 @@ export function buildTrack(map: MapData, renderer: THREE.WebGLRenderer): THREE.G
   if (sea) group.add(cliffs(map));
   const t = map.track;
   if (t && t.outside !== 'offroad') {
-    const [top, bottom, color] = t.outside === 'sea' ? [-0.01, -SEA_DEPTH, CLIFF_COLOR] : [WALL_HEIGHT, 0, map.wallColors[0]];
     const lines: [Vec[], boolean, number][] = [
       [t.line, true, t.halfWidth],
       ...(t.lanes ?? []).map((l): [Vec[], boolean, number] => [l.line, false, t.halfWidth]),
       ...(t.bridges ?? []).map((b): [Vec[], boolean, number] => [b.line, false, b.halfWidth]),
     ];
-    for (const [line, closed, hw] of lines) for (const side of [1, -1]) group.add(edgeStrip(map, t, line, closed, hw, side, top, bottom, color));
+    for (const [line, closed, hw] of lines) {
+      for (const side of [1, -1]) {
+        const points = edgePoints(t, line, closed, hw, side);
+        group.add(t.outside === 'sea' ? iceCliff(points) : wallStrip(map, points));
+      }
+    }
   }
 
   // 벽 타일은 InstancedMesh 하나로 그리므로 모두 같은 상자 모양이어야 한다.
@@ -274,36 +343,120 @@ export function buildTrack(map: MapData, renderer: THREE.WebGLRenderer): THREE.G
   return group;
 }
 
-// 중심선 한쪽 가장자리를 따라 세운 벽(또는 절벽) 면이다. 교차로·갈래길·지름길처럼 다른 트랙 안에 들어간 구간은 뺀다.
-function edgeStrip(map: MapData, t: CurvedTrack, line: Vec[], closed: boolean, hw: number, side: number, top: number, bottom: number, color: number): THREE.Mesh {
+interface EdgePoint {
+  x: number;
+  z: number;
+  ox: number; // 트랙 바깥을 향하는 단위 벡터
+  oz: number;
+  open?: boolean; // 다른 트랙 안에 들어가 면을 세우지 않는 점
+}
+
+// 중심선 한쪽 가장자리의 점들이다. 교차로·갈래길·지름길처럼 다른 트랙 안에 들어간 점은 open이다.
+function edgePoints(t: CurvedTrack, line: Vec[], closed: boolean, hw: number, side: number): EdgePoint[] {
   const n = line.length;
-  const segs = closed ? n : n - 1;
-  const pos: number[] = [];
-  const open: boolean[] = [];
-  for (let i = 0; i <= segs; i++) {
+  return [...Array(closed ? n + 1 : n).keys()].map((i) => {
     const p = line[i % n];
     const a = closed ? line[(i - 1 + n) % n] : line[Math.max(0, i - 1)];
     const b = closed ? line[(i + 1) % n] : line[Math.min(n - 1, i + 1)];
     const len = Math.hypot(b.x - a.x, b.y - a.y);
-    const x = p.x - ((b.y - a.y) / len) * hw * side;
-    const z = p.y + ((b.x - a.x) / len) * hw * side;
-    const h = heightAt(map, x, z);
-    pos.push(x, top + h, z, x, bottom + h, z);
+    const ox = (-(b.y - a.y) / len) * side, oz = ((b.x - a.x) / len) * side;
+    const x = p.x + ox * hw, z = p.y + oz * hw;
     const c = nearestOnTrack(t, x, z);
-    open.push(c.d < c.halfWidth - 0.05);
-  }
+    return { x, z, ox, oz, open: c.d < c.halfWidth - 0.05 };
+  });
+}
+
+// 점마다 section이 돌려준 단면 꼭짓점들을 이웃 점의 같은 꼭짓점과 면으로 잇는다. open인 점에 닿는 면은 비운다.
+function ribbon<P extends { open?: boolean }>(points: P[], section: (p: P, i: number) => number[][], colors?: number[]): THREE.BufferGeometry {
+  const pos: number[] = [];
+  const col: number[] = [];
+  let rows = 0;
+  points.forEach((p, i) => {
+    const vs = section(p, i);
+    rows = vs.length;
+    vs.forEach((v, j) => {
+      pos.push(...v);
+      if (colors) col.push(...new THREE.Color(colors[j]).toArray());
+    });
+  });
   const index: number[] = [];
-  for (let i = 0; i < segs; i++) {
-    if (open[i] || open[i + 1]) continue;
-    index.push(2 * i, 2 * i + 1, 2 * i + 2, 2 * i + 1, 2 * i + 3, 2 * i + 2);
+  for (let i = 0; i < points.length - 1; i++) {
+    if (points[i].open || points[i + 1].open) continue;
+    for (let j = 0; j < rows - 1; j++) {
+      const a = i * rows + j, b = a + rows;
+      index.push(a, a + 1, b, a + 1, b + 1, b);
+    }
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  if (colors) geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   geo.setIndex(index);
   geo.computeVertexNormals();
-  const mat = toon(color);
+  return geo;
+}
+
+function wallStrip(map: MapData, points: EdgePoint[]): THREE.Mesh {
+  const geo = ribbon(points, (p) => {
+    const h = heightAt(map, p.x, p.z);
+    return [[p.x, WALL_HEIGHT + h, p.z], [p.x, h, p.z]];
+  });
+  const mat = toon(map.wallColors[0]);
   mat.side = THREE.DoubleSide;
   return new THREE.Mesh(geo, mat);
+}
+
+// 절벽 면의 위에서 아래로 내려가는 층별 깊이 비율과 색이다. 네 번째 층의 밝은 띠가 얼음 지층처럼 보이게 한다.
+const ICE_LAYERS = [0, 0.18, 0.42, 0.62, 1];
+const ICE_COLORS = [0xf4fbff, 0xcdeefa, 0x86c9ec, 0xc4e8f8, 0x2f73b0];
+const ICE_JAG = 0.18; // 절벽 면이 안쪽으로 들어가는 최대 깊이(타일)
+const SNOW_LIP = 0.07;
+const FOAM_WIDTH = 0.35;
+
+// 점마다 안쪽으로 다르게 들어간 얼음 기둥 절벽, 위쪽 눈 테두리, 해수면의 거품 띠이다. 판정 경계 밖으로는 나가지 않는다.
+function iceCliff(points: EdgePoint[]): THREE.Group {
+  const rand = seeded(points.length * 31 + Math.round(points[0].x * 97 + points[0].z * 13));
+  const jag = points.map(() => 0.04 + rand() * (ICE_JAG - 0.04));
+  const at = (p: EdgePoint, out: number, y: number) => [p.x + p.ox * out, y, p.z + p.oz * out];
+
+  const face = ribbon(points, (p, i) => ICE_LAYERS.map((f, j) => at(p, j === 0 ? 0 : -jag[i], -0.01 - f * (SEA_DEPTH - 0.01))), ICE_COLORS);
+  const faceMat = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: gradient(), side: THREE.DoubleSide });
+
+  const lip = ribbon(points, (p) => [at(p, -SNOW_LIP, 0.012), at(p, SNOW_LIP, 0.012), at(p, SNOW_LIP, -0.09)]);
+  const lipMat = toon(0xffffff);
+  lipMat.side = THREE.DoubleSide;
+
+  const foam = ribbon(points, (p, i) => [at(p, -jag[i], -SEA_DEPTH + 0.015), at(p, FOAM_WIDTH, -SEA_DEPTH + 0.015)]);
+  const foamMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide });
+
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(face, faceMat), new THREE.Mesh(lip, lipMat), new THREE.Mesh(foam, foamMat));
+  return g;
+}
+
+const SKIRT_DEPTH = 2.5;
+const SKIRT_STEP = 0.5;
+const SKIRT_LIP = 0.25; // 단면 맨 위에 땅 색을 그대로 두는 띠의 높이(타일)
+
+function skirt(map: MapData, sea: boolean): THREE.Mesh {
+  const { width: w, height: h } = map;
+  const corners = [[0, 0], [w, 0], [w, h], [0, h], [0, 0]];
+  const points: { x: number; z: number; open?: boolean }[] = [];
+  for (let i = 0; i < 4; i++) {
+    const [ax, az] = corners[i], [bx, bz] = corners[i + 1];
+    const n = Math.ceil(Math.hypot(bx - ax, bz - az) / SKIRT_STEP);
+    for (let k = 0; k < n; k++) points.push({ x: ax + ((bx - ax) * k) / n, z: az + ((bz - az) * k) / n });
+  }
+  points.push({ x: 0, z: 0 });
+
+  const base = new THREE.Color(sea ? map.theme?.sea ?? SEA_COLOR : map.theme?.ground ?? GROUND_COLOR);
+  const shade = (f: number) => base.clone().multiplyScalar(f).getHex();
+  const geo = sea
+    ? ribbon(points, (p) => [[p.x, -SEA_DEPTH, p.z], [p.x, -SKIRT_DEPTH, p.z]], [base.getHex(), shade(0.45)])
+    : ribbon(points, (p) => {
+        const top = heightAt(map, p.x, p.z);
+        return [[p.x, top, p.z], [p.x, top - SKIRT_LIP, p.z], [p.x, top - SKIRT_LIP, p.z], [p.x, -SKIRT_DEPTH, p.z]];
+      }, [base.getHex(), base.getHex(), shade(0.6), shade(0.35)]);
+  return new THREE.Mesh(geo, new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: gradient(), side: THREE.DoubleSide }));
 }
 
 function cliffs(map: MapData): THREE.InstancedMesh {
@@ -483,12 +636,15 @@ export class KartModel {
 
   // 반환값이 true이면 이번 갱신에서 부딪혔다고 본다. 효과음 판단에 쓴다.
   update(k: ViewKart, time: number, dtSec: number, map: MapData): boolean {
-    const sink = k.fallLeft > 0 ? 1 - k.fallLeft / FALL_SEC : 0;
+    const drop = fallDrop(map, k);
+    const nose = drop > 0 ? -Math.min(FALL_NOSE_MAX, (FALL_SEC - k.fallLeft) * FALL_NOSE_RATE) : 0;
     const fx = Math.cos(k.angle) / 2, fy = Math.sin(k.angle) / 2;
     const pitch = Math.atan(heightAt(map, k.x + fx, k.y + fy) - heightAt(map, k.x - fx, k.y - fy));
-    this.root.position.set(k.x, heightAt(map, k.x, k.y) + this.layer * LAYER_GAP - sink * SEA_DEPTH, k.y);
-    this.root.rotation.set(0, -k.angle, pitch, 'YZX');
-    this.root.visible = k.spawnLeft === 0 || Math.floor(k.spawnLeft / SPAWN_BLINK_SEC) % 2 === 0;
+    this.root.position.set(k.x, heightAt(map, k.x, k.y) + this.layer * LAYER_GAP - drop, k.y);
+    this.root.rotation.set(0, -k.angle, pitch + nose, 'YZX');
+    const blink = (sec: number) => Math.floor(sec / SPAWN_BLINK_SEC) % 2 === 0;
+    // 땅 위 리스폰은 가라앉지 않고 깜빡이며 사라진다.
+    this.root.visible = (k.spawnLeft === 0 || blink(k.spawnLeft)) && (k.fallLeft === 0 || drop > 0 || blink(k.fallLeft));
 
     if (k.ghost !== this.ghost) {
       this.ghost = k.ghost;
@@ -511,7 +667,8 @@ export class KartModel {
 
     // 속력이 갑자기 떨어지면 부딪힌 것으로 보고 차체를 잠깐 찌그러뜨린다. 그리기에만 적용한다.
     const hit = k.fallLeft === 0 && this.lastSpeed - k.speed > BUMP_SPEED_DROP;
-    this.lastSpeed = k.speed;
+    // 바다 낙하 중에는 속력이 남아 있다가 리스폰에서 0이 되므로, 낙하 중 속력은 비교에 쓰지 않는다.
+    this.lastSpeed = k.fallLeft > 0 ? 0 : k.speed;
     if (hit) this.squash = 1;
     this.squash = Math.max(0, this.squash - dtSec * 5);
     const s = Math.sin(this.squash * Math.PI) * 0.22;

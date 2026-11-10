@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { heightAt, surfaceAtPoint, type MapData } from '@dashrush/shared';
-import type { ViewKart } from './scene.ts';
+import { fallDrop, SEA_DEPTH, type ViewKart } from './scene.ts';
 
 // 효과는 서버와 무관하게 각 클라이언트가 카트 상태(드리프트·노면·충돌)만 보고 만든다.
 
@@ -67,7 +67,7 @@ export class Effects {
   private sparks: Pool;
   private dustCarry = new Map<string, number>();
   private lastSkid = new Map<string, { x: number; y: number }>();
-  private falling = new Set<string>();
+  private splashed = new Set<string>();
 
   constructor(scene: THREE.Scene, private map: MapData) {
     this.dust = new Pool(scene, new THREE.SphereGeometry(0.12, 6, 4), 80);
@@ -77,17 +77,17 @@ export class Effects {
 
   kart(k: ViewKart, hit: boolean, dtSec: number) {
     if (k.fallLeft > 0) {
-      if (!this.falling.has(k.id)) {
-        this.falling.add(k.id);
+      if (!this.splashed.has(k.id) && fallDrop(this.map, k) >= SEA_DEPTH) {
+        this.splashed.add(k.id);
         for (let i = 0; i < SPLASH_COUNT; i++) {
           const a = Math.random() * Math.PI * 2;
           const vel = new THREE.Vector3(Math.cos(a) * 1.5, 2 + Math.random() * 2, Math.sin(a) * 1.5);
-          this.sparks.spawn(k.x, 0, k.y, SPLASH_COLORS[i % SPLASH_COLORS.length], 0.6, vel);
+          this.sparks.spawn(k.x, -SEA_DEPTH, k.y, SPLASH_COLORS[i % SPLASH_COLORS.length], 0.6, vel);
         }
       }
       return;
     }
-    this.falling.delete(k.id);
+    this.splashed.delete(k.id);
     if (k.ghost) return;
     const fx = Math.cos(k.angle), fy = Math.sin(k.angle);
     const at = (back: number, side: number) => ({ x: k.x - fx * back - fy * side, y: k.y - fy * back + fx * side });

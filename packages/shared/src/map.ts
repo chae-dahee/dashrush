@@ -62,13 +62,38 @@ export interface Hill extends Vec {
   height: number;
 }
 
+// 언덕을 더하고 골짜기 갈래길을 뺀 지면 높이이다. 언덕처럼 화면에만 보이며 물리 판정은 평면 그대로이다.
 export function heightAt(map: MapData, x: number, y: number): number {
   let h = 0;
   for (const hill of map.hills ?? []) {
     const d = Math.hypot(x - hill.x, y - hill.y);
     if (d < hill.radius) h += (hill.height * (1 + Math.cos((Math.PI * d) / hill.radius))) / 2;
   }
-  return h;
+  let cut = 0;
+  const t = map.track;
+  for (const l of t?.lanes ?? []) {
+    if (!t || !l.cut) continue;
+    const c = nearestOnLine(l.line, x, y, false);
+    const v = Math.max(0, c.d - t.halfWidth) / VALLEY_SLOPE;
+    if (v < 1) cut = Math.max(cut, (valleyDepth(t, l.line, l.cut, c.s) * (1 + Math.cos(Math.PI * v))) / 2);
+  }
+  return h - cut;
+}
+
+export function lineLength(line: Vec[]): number {
+  let total = 0;
+  for (let i = 1; i < line.length; i++) total += Math.hypot(line[i].x - line[i - 1].x, line[i].y - line[i - 1].y);
+  return total;
+}
+
+const VALLEY_RAMP = 3; // 골짜기 양 끝 비탈의 길이(타일)
+const VALLEY_SLOPE = 3; // 갈래길 가장자리에서 바깥 땅까지 옆 비탈의 폭(타일)
+
+// 갈래길 시작점에서 s만큼 간 곳의 골짜기 깊이이다. 갈래길 양 끝은 본선 중심선 위에 있으므로 본선 반폭만큼 안에서 비탈을 시작한다.
+function valleyDepth(t: CurvedTrack, line: Vec[], cut: number, s: number): number {
+  const s0 = t.halfWidth, s1 = lineLength(line) - t.halfWidth;
+  const u = Math.min(1, Math.max(0, Math.min(s - s0, s1 - s) / VALLEY_RAMP));
+  return cut * Math.sin((Math.PI / 2) * u) ** 2;
 }
 
 // 닫힌 중심선에서 halfWidth 안쪽이 트랙이다.
@@ -77,7 +102,7 @@ export interface CurvedTrack {
   halfWidth: number;
   surface: 'asphalt' | 'ice';
   outside: 'offroad' | 'sea' | 'wall';
-  lanes?: { line: Vec[]; surface: 'sand' }[]; // 늘 열려 있는 갈래길이며 열린 곡선이다.
+  lanes?: { line: Vec[]; surface: 'sand'; cut?: number }[]; // 늘 열려 있는 갈래길이며 열린 곡선이다. cut이 있으면 그 깊이로 완만하게 파인 골짜기이다.
   bridges?: { line: Vec[]; halfWidth: number }[]; // 늘 열려 있는 지름길이며 트랙과 같은 재질로 판정한다.
 }
 
@@ -95,8 +120,8 @@ export interface WallSign extends Vec {
 export const DECOR_RADIUS = {
   cone: 0.3, tires: 0.55, grandstand: 1.9, pit: 1.8, lightTower: 0.45, billboard: 0.9, flag: 0.25, balloons: 0.35,
   shop: 1.6, streetTree: 0.55, lamp: 0.25, trafficLight: 0.25, planter: 0.45,
-  maple: 0.75, gate: 1.9, shrub: 0.75, bench: 0.6, leafPile: 0.6,
-  hut: 1.3, pine: 0.6, snowman: 0.5, snowdrift: 0.8, iceChunk: 0.45,
+  maple: 0.75, gate: 1.9, shrub: 0.75, bench: 0.6, leafPile: 0.6, pavilion: 1.6,
+  hut: 1.3, pine: 0.6, snowman: 0.5, snowdrift: 0.8, iceChunk: 0.45, arrowBoard: 1.6,
   mesa: 1.8, cactus: 0.4, camp: 1.7, tent: 0.9, bush: 0.5, stake: 0.15, rock: 0.7,
   iceberg: 1.8, icePillar: 0.7, floe: 1.3,
 };
@@ -177,15 +202,19 @@ export function nearestOnTrack(t: CurvedTrack, x: number, y: number): Vec & { d:
   return best;
 }
 
-function nearestOnLine(line: Vec[], x: number, y: number, closed: boolean): Vec & { d: number } {
-  let best = { x: line[0].x, y: line[0].y, d: Infinity };
+// s는 선 시작점에서 가장 가까운 점까지 선을 따라 간 거리이다.
+function nearestOnLine(line: Vec[], x: number, y: number, closed: boolean): Vec & { d: number; s: number } {
+  let best = { x: line[0].x, y: line[0].y, d: Infinity, s: 0 };
+  let acc = 0;
   for (let i = 0; i < line.length - (closed ? 0 : 1); i++) {
     const a = line[i], b = line[(i + 1) % line.length];
     const dx = b.x - a.x, dy = b.y - a.y;
     const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / (dx * dx + dy * dy || 1)));
     const px = a.x + dx * t, py = a.y + dy * t;
     const d = Math.hypot(px - x, py - y);
-    if (d < best.d) best = { x: px, y: py, d };
+    const len = Math.hypot(dx, dy);
+    if (d < best.d) best = { x: px, y: py, d, s: acc + len * t };
+    acc += len;
   }
   return best;
 }

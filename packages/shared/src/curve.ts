@@ -12,7 +12,7 @@ export interface CurvedMapSpec {
   outside: CurvedTrack['outside'];
   finish: Point; // 첫 변 위의 결승선 위치
   cpStep?: number;
-  lanes?: { from: Point; to: Point; surface: 'sand' }[];
+  lanes?: { from: Point; to: Point; surface: 'sand'; cut?: number }[];
   bridges?: { from: Point; to: Point; bulge: number; halfWidth?: number }[];
   patches?: { x: number; y: number; w: number; h: number; ch: string }[];
 }
@@ -34,7 +34,7 @@ export function curvedMap(spec: CurvedMapSpec): Pick<MapData, 'width' | 'height'
   const skips: [number, number][] = [];
   const lanes = (spec.lanes ?? []).map((l) => {
     skips.push([cum[nearestIndex(line, l.from)], cum[nearestIndex(line, l.to)]]);
-    return { line: [toVec(l.from), toVec(l.to)], surface: l.surface };
+    return { line: [toVec(l.from), toVec(l.to)], surface: l.surface, ...(l.cut && { cut: l.cut }) };
   });
   const bridges = (spec.bridges ?? []).map((b) => {
     const i0 = nearestIndex(line, b.from), i1 = nearestIndex(line, b.to);
