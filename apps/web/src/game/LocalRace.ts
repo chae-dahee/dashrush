@@ -1,6 +1,7 @@
 import {
   COUNTDOWN_MS,
   createKart,
+  finishInput,
   stepKart,
   TICK_MS,
   validateMap,
@@ -29,7 +30,7 @@ interface Options {
   color: number;
   onHud: (hud: RaceHud) => void;
   onTime: (ms: number) => void;
-  onGauge: (g: { gauge: number; boostLeft: number }) => void;
+  onGauge: (g: { gauge: number; boostLeft: number; vx: number; vy: number }) => void;
   onWrongWay: (wrongWay: boolean) => void;
   onCountdown: (text: string | null) => void;
   onView: (view: ViewMode) => void;
@@ -113,12 +114,12 @@ export class LocalRace {
   }
 
   private tick() {
-    const racing = performance.now() >= this.startAt;
-    const bits = racing && !this.kart.finished ? this.keyboard.bits() : 0;
+    // 출발 전에 물리를 돌리면 출발 부스트 판정 시간이 미리 줄어든다.
+    if (performance.now() < this.startAt) return;
+    const bits = this.kart.finished ? finishInput(this.kart, this.opts.map) : this.keyboard.bits();
     this.prev = this.kart;
     const { kart, passed, crossFrac } = stepKart(this.kart, bits, this.opts.map, this.opts.laps);
     this.kart = kart;
-    if (!racing) return;
 
     this.raceTicks++;
     if (passed === 0 && kart.lap > this.prev.lap) {

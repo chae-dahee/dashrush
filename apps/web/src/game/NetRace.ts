@@ -2,6 +2,7 @@ import {
   CORRECTION_SNAP,
   createKart,
   EXTRAPOLATE_MAX_MS,
+  finishInput,
   INTERP_DELAY_MS,
   stepKart,
   TEAM_POINTS,
@@ -48,7 +49,7 @@ interface Options {
   raceStartsAt: number; // 서버 시각
   onHud: (hud: NetHud) => void;
   onTime: (raceMs: number, limitLeftMs: number | null) => void;
-  onGauge: (g: { gauge: number; boostLeft: number }) => void;
+  onGauge: (g: { gauge: number; boostLeft: number; vx: number; vy: number }) => void;
   onWrongWay: (wrongWay: boolean) => void;
   onCountdown: (text: string | null) => void;
   onView: (view: ViewMode) => void;
@@ -160,6 +161,7 @@ export class NetRace {
       sinceHit: s.sinceHit,
       boostHeld: s.boostHeld,
       offroadSec: s.offroadSec,
+      startLeft: s.startLeft,
       boostLeft: s.boostLeft,
       lap: s.lap,
       cp: s.checkpoint,
@@ -182,8 +184,10 @@ export class NetRace {
 
   private tick() {
     if (serverNow() < this.opts.raceStartsAt) return;
-    let bits = 0;
-    if (!this.pred.finished) {
+    let bits: number;
+    if (this.pred.finished) {
+      bits = finishInput(this.pred, this.opts.map);
+    } else {
       bits = this.keyboard.bits();
       this.seq++;
       this.opts.socket.emit('race:input', { seq: this.seq, bits });
