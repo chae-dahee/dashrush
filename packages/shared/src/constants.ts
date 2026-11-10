@@ -48,7 +48,10 @@ export const WALL_IMPACT_MIN = 2; // 벽으로 들어오던 속력이 이보다 
 export const WALL_MIN_BOUNCE = 2; // 벽을 민 뒤 바깥으로 튕겨 나가는 최소 속력(타일/초)
 export const WALL_SCRAPE_MAX = 0.5; // 이보다 약하게 미는 것은 벽을 스치는 것으로 보고 튕기지 않는다(타일/초).
 export const WALL_TURN_MAX = 0.35; // 벽을 밀 때마다 벽을 따라가는 쪽으로 틀어 주는 최대 각도(라디안)
+export const START_BOOST_WINDOW = 0.8; // 출발 뒤 이 시간 안에 부스트 키를 새로 누르면 출발 부스트를 얻는다(초).
+export const START_BOOST_SEC = 1;
 export const FALL_SEC = 1.5;
+export const FALL_DRAG = 0.8; // 바다로 떨어지는 동안의 공기 저항(초당 감쇠율)
 export const OFFROAD_RESPAWN_SEC = 3;
 export const SPAWN_GHOST_SEC = 1.5;
 

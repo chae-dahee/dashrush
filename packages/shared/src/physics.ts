@@ -12,6 +12,7 @@ import {
   DRIFT_MIN_SPEED,
   DRIFT_SLIP_MIN,
   DRIFT_TURN_MUL,
+  FALL_DRAG,
   FALL_SEC,
   GAUGE_CLEAN_DELAY_SEC,
   GAUGE_CLEAN_RATE,
@@ -27,6 +28,8 @@ import {
   REVERSE_ACCEL,
   REVERSE_MAX,
   SPAWN_GHOST_SEC,
+  START_BOOST_SEC,
+  START_BOOST_WINDOW,
   TICK_MS,
   TURN_FULL_SPEED,
   TURN_RATE,
@@ -38,7 +41,14 @@ import {
   WALL_TURN_MAX,
 } from './constants.ts';
 import { has, INPUT_ACCEL, INPUT_BOOST, INPUT_BRAKE, INPUT_DRIFT, INPUT_LEFT, INPUT_RIGHT } from './input.ts';
-import { nearestOnTrack, SURFACE_PARAMS, surfaceAt, surfaceAtPoint, type GridSlot, type MapData } from './map.ts';
+import {
+  nearestOnTrack,
+  SURFACE_PARAMS,
+  surfaceAt,
+  surfaceAtPoint,
+  type GridSlot,
+  type MapData,
+} from './map.ts';
 import { segmentCross } from './track.ts';
 
 const DT = TICK_MS / 1000;
@@ -55,6 +65,7 @@ export interface KartState {
   sinceHit: number; // 마지막으로 벽이나 카트에 부딪힌 뒤 지난 시간(초)
   boostHeld: boolean; // 직전 tick의 부스트 키 상태이며, 누른 순간만 부스트를 쓰게 한다.
   offroadSec: number;
+  startLeft: number; // 출발 부스트를 받을 수 있는 남은 시간(초). 실패하거나 받으면 0이다.
   boostLeft: number;
   lap: number; // 완주한 랩 수
   cp: number; // 마지막으로 통과한 체크포인트. 출발 전에는 -1이다.
@@ -82,6 +93,7 @@ export function createKart(slot: GridSlot): KartState {
     sinceHit: 0,
     boostHeld: false,
     offroadSec: 0,
+    startLeft: START_BOOST_WINDOW,
     boostLeft: 0,
     lap: 0,
     cp: -1,
@@ -116,6 +128,11 @@ export function stepKart(prev: KartState, bits: number, map: MapData, laps: numb
   k.spawnLeft = Math.max(0, k.spawnLeft - DT);
   if (k.fallLeft > 0) {
     k.fallLeft = Math.max(0, k.fallLeft - DT);
+    k.x += k.vx * DT;
+    k.y += k.vy * DT;
+    const keep = Math.exp(-FALL_DRAG * DT);
+    k.vx *= keep;
+    k.vy *= keep;
     if (k.fallLeft === 0) respawn(k, map);
     return { kart: k, passed: null, crossFrac: 0 };
   }
@@ -123,6 +140,13 @@ export function stepKart(prev: KartState, bits: number, map: MapData, laps: numb
   k.sinceHit += DT;
 
   const boostKey = has(bits, INPUT_BOOST);
+  // 출발 전 입력은 서버로 가지 않으므로, 첫 tick에 이미 눌려 있으면 너무 일찍 누른 것으로 보고 기회를 없앤다.
+  if (k.startLeft === START_BOOST_WINDOW && boostKey) k.startLeft = 0;
+  else if (k.startLeft > 0 && boostKey && !k.boostHeld) {
+    k.startLeft = 0;
+    k.boostLeft = START_BOOST_SEC;
+  }
+  k.startLeft = Math.max(0, k.startLeft - DT);
   if (boostKey && !k.boostHeld && k.boostLeft === 0 && k.gauge >= BOOST_USE_COST) {
     k.gauge -= BOOST_USE_COST;
     k.boostLeft = BOOST_USE_SEC;
@@ -201,7 +225,7 @@ export function stepKart(prev: KartState, bits: number, map: MapData, laps: numb
   if (here === 'sea' || k.offroadSec >= OFFROAD_RESPAWN_SEC) {
     k.fallLeft = FALL_SEC;
     k.offroadSec = 0;
-    k.vx = k.vy = 0;
+    if (here !== 'sea') k.vx = k.vy = 0;
     k.drifting = false;
     k.driftSlip = 0;
   }
@@ -218,7 +242,13 @@ export function stepKart(prev: KartState, bits: number, map: MapData, laps: numb
         k.cp = next;
         passed = next;
         crossFrac = t;
-        if (k.lap >= laps) k.finished = true;
+        if (k.lap >= laps) {
+          // 남은 부스트나 드리프트 종료 부스트가 완주 뒤 브레이크를 상쇄하지 않게 한다.
+          k.finished = true;
+          k.boostLeft = 0;
+          k.drifting = false;
+          k.driftSlip = 0;
+        }
         break;
       }
       if (!cp.optional) break;

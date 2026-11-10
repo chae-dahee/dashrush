@@ -6,6 +6,7 @@ import {
   createKart,
   DISCONNECT_GRACE_MS,
   FINISH_LIMIT_MS,
+  finishInput,
   INPUT_MAX,
   INPUT_QUEUE_MAX,
   INPUT_STALE_TICKS,
@@ -438,7 +439,7 @@ export class Room {
         }
       }
       const prev = r.kart;
-      const bits = prev.finished || r.ghost ? 0 : r.bits;
+      const bits = r.ghost ? 0 : prev.finished ? finishInput(prev, map) : r.bits;
       const { kart, passed, crossFrac } = stepKart(prev, bits, map, this.laps);
       r.kart = kart;
       if (passed === 0 && kart.lap > prev.lap) this.onLap(r, (this.tick - 1 + crossFrac) * TICK_MS);
@@ -466,6 +467,7 @@ export class Room {
         sinceHit: r2(r.kart.sinceHit),
         boostHeld: r.kart.boostHeld,
         offroadSec: r2(r.kart.offroadSec),
+        startLeft: r2(r.kart.startLeft),
         boostLeft: r2(r.kart.boostLeft),
         fallLeft: r2(r.kart.fallLeft),
         spawnLeft: r2(r.kart.spawnLeft),

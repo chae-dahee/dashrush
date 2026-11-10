@@ -167,7 +167,6 @@ function build(type: DecorType, v: number): Model {
       m.add(B(4.0, 0.16, 2.7, 0.08), trim, 0, 3.35, 0, { r: [0.08, 0, 0] });
       for (let i = 0; i < 8; i++) m.add(S(0.25, 14, 8), i % 2 ? W : seat, -1.75 + i * 0.5, 3.2, 1.38, { s: [1, 0.6, 0.4] });
       flag(m, 0, 4.4, -0.6, seat);
-      // 관중은 응원하듯 함께 들썩인다.
       m.move({ kind: 'bob', amp: 0.06, speed: 7 });
       for (let i = 0; i < 4; i++) {
         const y = 0.5 + (i + 1) * 0.45, z = 0.85 - i * 0.6;
@@ -269,7 +268,6 @@ function build(type: DecorType, v: number): Model {
       const crown: [number, number, number, number, number][] = [[0, 2.4, 0, 0.95, 0], [0.55, 2.75, 0.2, 0.7, 1], [-0.5, 2.7, -0.25, 0.65, 2], [0.1, 3.15, -0.1, 0.55, 1]];
       for (const [x, y, z, r, c] of crown) {
         m.add(S(r), leaf[c], x, y, z);
-        // 수관 윗면에 납작한 눈을 얹는다.
         if (v === 2) m.add(S(r * 0.82), W, x, y + r * 0.42, z, { s: [1, 0.45, 1] });
       }
       break;
@@ -358,6 +356,23 @@ function build(type: DecorType, v: number): Model {
       }
       break;
     }
+    case 'pavilion': {
+      const roof = [0x46b04f, 0xd9583b][v % 2];
+      m.add(L([[0, 0], [1.55, 0], [1.55, 0.2], [1.4, 0.3], [0, 0.3]]), 0xfff1d0);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * 2 * PI;
+        m.add(C(0.1, 0.12, 2.0, 12), 0xd9583b, Math.cos(a) * 1.2, 1.3, Math.sin(a) * 1.2);
+      }
+      m.add(C(0.45, 0.45, 0.08), 0xd9783f, 0, 0.85, 0);
+      m.add(C(0.08, 0.1, 0.55, 10), 0xd9783f, 0, 0.55, 0);
+      m.add(C(1.75, 1.75, 0.12, 24), 0xfff1d0, 0, 2.3, 0);
+      m.add(L([[1.85, 2.3], [1.55, 2.5], [1.05, 2.85], [0.55, 3.25], [0.18, 3.6], [0, 3.65]]), roof);
+      m.add(R(1.8, 0.07), 0xffc83d, 0, 2.33, 0, { r: [PI / 2, 0, 0] });
+      m.add(S(0.2), 0xffc83d, 0, 3.75, 0);
+      m.move({ kind: 'pulse', amp: 0.05, speed: 3 }, 0, 2.2, 0);
+      bulbs(m, Array.from({ length: 12 }, (_, k): V3 => [1.8 * Math.cos((k * PI) / 6), 2.2, 1.8 * Math.sin((k * PI) / 6)]), [LIGHT, 0xff9ecf, 0xffc83d]);
+      break;
+    }
     case 'hut': {
       const wall = [0xff5b5b, 0x3d7bff, 0xffc83d][v % 3];
       m.add(B(2.2, 1.5, 2.0, 0.1), wall, 0, 0.75, 0);
@@ -419,6 +434,19 @@ function build(type: DecorType, v: number): Model {
       for (const [x, y, z, r, c] of [[0, 0.15, 0, 0.75, W], [0.55, 0.1, 0.25, 0.5, 0xe9f4ff], [-0.5, 0.1, -0.2, 0.55, 0xf4f8ff]]) {
         m.add(S(r), c, x, y, z, { s: [1, 0.45, 1] });
       }
+      break;
+    case 'arrowBoard':
+      // 화살표는 +x 쪽, 곧 앞면을 마주한 카트의 오른쪽을 가리킨다.
+      for (const x of [-1.2, 1.2]) m.add(C(0.07, 0.08, 1.6, 12), 0x8a96a8, x, 0.8, 0);
+      m.add(B(3.0, 1.1, 0.12, 0.08), 0x3d7bff, 0, 1.55, 0);
+      for (const z of [0.07, -0.07]) {
+        for (const x of [-0.8, 0, 0.8]) {
+          for (const s of [1, -1]) m.add(B(0.5, 0.13, 0.04, 0.03), W, x, 1.55 + s * 0.17, z, { r: [0, 0, -s * PI / 4], glow: true, line: 0 });
+        }
+      }
+      m.add(B(3.1, 0.16, 0.26, 0.07), W, 0, 2.17, 0);
+      for (const [x, r] of [[-0.9, 0.2], [0.2, 0.24], [1.1, 0.18]]) m.add(S(r, 14, 10), W, x, 2.25, 0, { s: [1.6, 0.6, 0.9] });
+      for (const x of [-1.2, 1.2]) m.add(S(0.45), 0xf4f8ff, x, 0.1, 0, { s: [1, 0.4, 1] });
       break;
     case 'iceChunk':
       m.add(O(0.4), 0xbfeaff, 0, 0.55, 0, { s: [0.7, 1.6, 0.7] });
@@ -500,7 +528,6 @@ function build(type: DecorType, v: number): Model {
     case 'iceberg':
       m.move({ kind: 'bob', amp: 0.12, speed: 0.8 });
       if (v % 2) {
-        // 길게 이어진 눈 능선
         for (const x of [-1.3, 0, 1.3]) m.add(I(1.15, 1), 0x9fe3ff, x, 0.5, 0, { s: [1, 0.8, 0.9] });
         m.add(new THREE.CapsuleGeometry(0.55, 2.6, 6, 16), W, 0, 1.25, 0, { r: [0, 0, PI / 2], s: [1, 0.7, 1] });
         crystal(m, 0.4, 1.4, 0xdff8ff, 0.6, 1.8, 0, -0.2);
@@ -595,7 +622,6 @@ interface Moving {
   phases: number[];
 }
 
-// 맵 장식 전체를 그리고, update로 깃발·나무·조명 같은 움직임을 갱신한다.
 export class DecorLayer {
   readonly root = new THREE.Group();
   private moving: Moving[] = [];
@@ -651,7 +677,6 @@ export class DecorLayer {
       }
     }
 
-    // 바닥에 닿은 느낌을 주는 둥근 그림자
     const shadow = new THREE.InstancedMesh(
       new THREE.CircleGeometry(1, 24).rotateX(-PI / 2),
       new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.16, depthWrite: false }),
