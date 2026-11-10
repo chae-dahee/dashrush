@@ -17,6 +17,13 @@ body {
   color: var(--ink);
   font-family: var(--font);
   font-weight: 700;
+  /* 모바일에서 더블탭 확대, 글자 선택, 길게 누르기 메뉴, 당겨서 새로고침을 막는다. */
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
 }
 
 button,
@@ -24,6 +31,11 @@ input,
 select {
   font: inherit;
   color: inherit;
+}
+
+input {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 h1,
@@ -398,6 +410,7 @@ button.badge {
   inset: 0;
   overflow: hidden;
   container-type: size;
+  touch-action: none;
 }
 
 /* 경주 화면은 기기 방향과 관계없이 가로로 보여 준다. */
