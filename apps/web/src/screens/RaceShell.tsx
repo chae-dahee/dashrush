@@ -36,9 +36,12 @@ interface Props {
 export interface GaugeState {
   gauge: number;
   boostLeft: number;
+  vx: number;
+  vy: number;
 }
 
 const GAUGE_SLOTS = GAUGE_MAX / BOOST_USE_COST;
+const KMH_PER_TILE = 20; // 화면에 보이는 속도(km/h)로 바꾸는 배율이며, 최고 속도 9타일/초가 180km/h가 된다.
 
 // 게이지는 부스트 1회 사용량 단위로 칸을 나눠, 지금 몇 번 쓸 수 있는지 보이게 한다.
 export function updateGauge(el: HTMLDivElement | null, g: GaugeState) {
@@ -49,8 +52,9 @@ export function updateGauge(el: HTMLDivElement | null, g: GaugeState) {
   });
   const uses = Math.floor(g.gauge / BOOST_USE_COST);
   el.querySelector<HTMLDivElement>('[data-label]')!.textContent =
-    g.boostLeft > 0 ? 'BOOST!' : uses > 0 ? `부스트 ${uses}회 (Space)` : '';
-  el.style.opacity = uses > 0 || g.boostLeft > 0 ? '1' : '0.6';
+    g.boostLeft > 0 ? 'BOOST!' : uses > 0 ? `부스트 ${uses}회` : '';
+  el.querySelector<HTMLDivElement>('[data-meter]')!.style.opacity = uses > 0 || g.boostLeft > 0 ? '1' : '0.6';
+  el.querySelector<HTMLDivElement>('[data-speed]')!.textContent = String(Math.round(Math.hypot(g.vx, g.vy) * KMH_PER_TILE));
 }
 
 export function RaceShell({
@@ -88,13 +92,19 @@ export function RaceShell({
         </button>
       </div>
       <div ref={gaugeRef} style={gaugeStyle}>
-        <div data-label style={{ height: '1.2em', fontWeight: 900, color: '#fff', WebkitTextStroke: '1px #2b2340' }} />
-        <div style={{ display: 'flex', gap: 4 }}>
-          {Array.from({ length: GAUGE_SLOTS }, (_, i) => (
-            <div key={i} style={gaugeSlotStyle}>
-              <div data-seg style={{ height: '100%', width: 0, background: 'var(--sun)' }} />
-            </div>
-          ))}
+        <div style={speedStyle}>
+          <span data-speed>0</span>
+          <span style={{ fontSize: '0.45em', marginLeft: 4 }}>km/h</span>
+        </div>
+        <div data-meter style={{ opacity: 0.4 }}>
+          <div data-label style={{ height: '1.2em', fontWeight: 900, color: '#fff', WebkitTextStroke: '1px #2b2340' }} />
+          <div style={{ display: 'flex', gap: 4 }}>
+            {Array.from({ length: GAUGE_SLOTS }, (_, i) => (
+              <div key={i} style={gaugeSlotStyle}>
+                <div data-seg style={{ height: '100%', width: 0, background: 'var(--sun)' }} />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
       {wrongWay && <div style={wrongWayStyle}>역주행!</div>}
@@ -103,6 +113,7 @@ export function RaceShell({
           {countdown}
         </div>
       )}
+      {countdown && <div style={startHintStyle}>GO! 때 부스트</div>}
       {overlay && <div className="card overlay">{overlay}</div>}
       {isTouch && <TouchControls />}
     </div>
@@ -111,49 +122,62 @@ export function RaceShell({
 
 const isTouch = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
 
-const TOUCH_LEFT = [
-  { label: '◀', bit: INPUT_LEFT },
-  { label: '▶', bit: INPUT_RIGHT },
+interface TouchKey {
+  name: string;
+  label?: string;
+  bit: number;
+  icon: ReactNode;
+}
+
+const TOUCH_LEFT: TouchKey[] = [
+  { name: 'left', bit: INPUT_LEFT, icon: <polyline points="15,5 8,12 15,19" /> },
+  { name: 'right', bit: INPUT_RIGHT, icon: <polyline points="9,5 16,12 9,19" /> },
 ];
-const TOUCH_RIGHT = [
-  { label: '브레이크', bit: INPUT_BRAKE },
-  { label: '드리프트', bit: INPUT_DRIFT },
+const TOUCH_RIGHT: TouchKey[] = [
+  { name: 'brake', label: '브레이크', bit: INPUT_BRAKE, icon: <rect x="6" y="6" width="12" height="12" rx="2" /> },
+  { name: 'drift', label: '드리프트', bit: INPUT_DRIFT, icon: <path d="M5 19 C5 11 9 7 18 7 M14 3 L18 7 L14 11" /> },
 ];
-const TOUCH_BOOST = { label: '부스트', bit: INPUT_BOOST };
+const TOUCH_BOOST: TouchKey = { name: 'boost', label: '부스트', bit: INPUT_BOOST, icon: <polygon points="13,2 5,14 11,14 10,22 19,9 13,9" /> };
 
 function TouchControls() {
   useEffect(() => {
-    touch.auto = true;
     return () => {
       touch.bits = 0;
-      touch.auto = false;
     };
   }, []);
-  const button = ({ label, bit }: { label: string; bit: number }) => {
-    const press = (e: React.PointerEvent) => {
+  // 누른 표시는 다시 그리지 않고 data-on 속성으로만 바꾼다.
+  const button = ({ name, label, bit, icon }: TouchKey) => {
+    const press = (e: React.PointerEvent<HTMLButtonElement>) => {
       e.preventDefault();
       touch.bits |= bit;
+      e.currentTarget.dataset.on = '';
     };
-    const release = () => (touch.bits &= ~bit);
+    const release = (e: React.PointerEvent<HTMLButtonElement>) => {
+      touch.bits &= ~bit;
+      delete e.currentTarget.dataset.on;
+    };
     return (
       <button
-        key={label}
-        style={touchButtonStyle}
+        key={name}
+        className={`touch-btn ${name}`}
         onPointerDown={press}
         onPointerUp={release}
         onPointerCancel={release}
         onPointerLeave={release}
         onContextMenu={(e) => e.preventDefault()}
       >
+        <svg viewBox="0 0 24 24">{icon}</svg>
         {label}
       </button>
     );
   };
   return (
     <>
-      <div style={{ ...touchPadStyle, left: 12 }}>{TOUCH_LEFT.map(button)}</div>
-      <div style={{ ...touchPadStyle, right: 12 }}>{TOUCH_RIGHT.map(button)}</div>
-      <div style={{ ...touchPadStyle, right: 12, bottom: 100 }}>{button(TOUCH_BOOST)}</div>
+      <div className="touch-pad" style={{ left: 12 }}>{TOUCH_LEFT.map(button)}</div>
+      <div className="touch-pad right">
+        {button(TOUCH_BOOST)}
+        <div style={{ display: 'flex', gap: 10 }}>{TOUCH_RIGHT.map(button)}</div>
+      </div>
     </>
   );
 }
@@ -206,8 +230,17 @@ const gaugeStyle: React.CSSProperties = {
   transform: 'translateX(-50%)',
   textAlign: 'center',
   fontSize: 'clamp(11px, 3cqh, 18px)',
-  opacity: 0.4,
   pointerEvents: 'none',
+};
+
+const speedStyle: React.CSSProperties = {
+  fontSize: '2em',
+  fontWeight: 900,
+  fontStyle: 'italic',
+  fontVariantNumeric: 'tabular-nums',
+  color: '#fff',
+  WebkitTextStroke: '1.5px #2b2340',
+  lineHeight: 1,
 };
 
 const gaugeSlotStyle: React.CSSProperties = {
@@ -217,27 +250,6 @@ const gaugeSlotStyle: React.CSSProperties = {
   border: '3px solid #2b2340',
   background: 'rgba(255,255,255,0.6)',
   overflow: 'hidden',
-};
-
-const touchPadStyle: React.CSSProperties = {
-  position: 'absolute',
-  bottom: 16,
-  display: 'flex',
-  gap: 10,
-  touchAction: 'none',
-  userSelect: 'none',
-};
-
-const touchButtonStyle: React.CSSProperties = {
-  width: 'min(72px, 18cqh)',
-  height: 'min(72px, 18cqh)',
-  borderRadius: '50%',
-  border: '3px solid rgba(43,35,64,0.6)',
-  background: 'rgba(255,255,255,0.35)',
-  fontWeight: 800,
-  fontSize: 'clamp(10px, 2.6cqh, 14px)',
-  touchAction: 'none',
-  WebkitUserSelect: 'none',
 };
 
 const countdownStyle: React.CSSProperties = {
@@ -250,5 +262,18 @@ const countdownStyle: React.CSSProperties = {
   color: '#fff',
   WebkitTextStroke: '6px #2b2340',
   animation: 'pop 0.35s ease-out',
+  pointerEvents: 'none',
+};
+
+const startHintStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 'calc(35% + min(80px, 20cqh))',
+  left: '50%',
+  transform: 'translateX(-50%)',
+  fontSize: 'clamp(13px, 4cqh, 22px)',
+  fontWeight: 900,
+  color: '#fff',
+  WebkitTextStroke: '1.5px #2b2340',
+  whiteSpace: 'nowrap',
   pointerEvents: 'none',
 };

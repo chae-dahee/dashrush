@@ -576,3 +576,83 @@ button.badge {
     width: 0;
   }
 }
+
+/* 경주 화면 터치 버튼이다. 맵을 가리지 않도록 반투명하게 두고, 누른 동안만 색을 채운다. */
+.touch-pad {
+  position: absolute;
+  bottom: 16px;
+  display: flex;
+  gap: 10px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.touch-pad.right {
+  right: 12px;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.touch-btn {
+  --on: var(--paper);
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 1px;
+  width: min(76px, 19cqh);
+  height: min(76px, 19cqh);
+  padding: 0;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.75);
+  background: rgba(43, 35, 64, 0.28);
+  box-shadow: 0 3px 0 rgba(43, 35, 64, 0.45);
+  color: var(--paper);
+  font: 800 clamp(9px, 2.3cqh, 12px) var(--font);
+  text-shadow: 0 1px 0 var(--ink);
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 60ms, background-color 60ms;
+}
+
+.touch-btn svg {
+  width: 44%;
+  height: 44%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1.5px 0 rgba(43, 35, 64, 0.8));
+}
+
+.touch-btn[data-on] {
+  background: var(--on);
+  border-color: var(--ink);
+  color: var(--ink);
+  text-shadow: none;
+  box-shadow: none;
+  transform: translateY(3px) scale(0.94);
+}
+
+.touch-btn.brake {
+  --on: #ff6b5b;
+}
+
+.touch-btn.drift {
+  --on: #6fd6ff;
+}
+
+.touch-btn.boost {
+  --on: var(--sun);
+  width: min(88px, 22cqh);
+  height: min(88px, 22cqh);
+  border-color: var(--sun);
+}
+
+.touch-btn.boost svg {
+  fill: var(--sun);
+  stroke: var(--ink);
+  stroke-width: 1.8;
+  filter: none;
+}

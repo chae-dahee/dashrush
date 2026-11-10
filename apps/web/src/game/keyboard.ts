@@ -1,8 +1,6 @@
 import { INPUT_ACCEL, INPUT_BOOST, INPUT_BRAKE, INPUT_DRIFT, INPUT_LEFT, INPUT_RIGHT } from '@dashrush/shared';
 
 const KEY_BITS: Record<string, number> = {
-  ArrowUp: INPUT_ACCEL,
-  KeyW: INPUT_ACCEL,
   ArrowDown: INPUT_BRAKE,
   KeyS: INPUT_BRAKE,
   ArrowLeft: INPUT_LEFT,
@@ -15,7 +13,7 @@ const KEY_BITS: Record<string, number> = {
 };
 
 // 화면 터치 버튼이 누른 입력 비트이다. 키보드 입력과 합쳐 보낸다.
-export const touch = { bits: 0, auto: false };
+export const touch = { bits: 0 };
 
 export class Keyboard {
   private pressed = new Set<string>();
@@ -41,7 +39,8 @@ export class Keyboard {
   bits(): number {
     let bits = touch.bits;
     for (const code of this.pressed) bits |= KEY_BITS[code];
-    if (touch.auto && !(bits & INPUT_BRAKE)) bits |= INPUT_ACCEL;
+    // 가속 키가 없고 브레이크를 누르지 않으면 늘 가속한다.
+    if (!(bits & INPUT_BRAKE)) bits |= INPUT_ACCEL;
     return bits;
   }
 
