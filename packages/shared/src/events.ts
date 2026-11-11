@@ -52,6 +52,7 @@ export interface KartSnapshot {
   spawnLeft: number;
   lap: number;
   checkpoint: number;
+  missed: number;
   rank: number;
   ghost: boolean;
   lastSeq: number;

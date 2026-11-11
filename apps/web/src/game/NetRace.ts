@@ -1,4 +1,5 @@
 import {
+  collideKarts,
   CORRECTION_SNAP,
   createKart,
   EXTRAPOLATE_MAX_MS,
@@ -6,6 +7,7 @@ import {
   INTERP_DELAY_MS,
   stepKart,
   TEAM_POINTS,
+  type KartBody,
   type KartSnapshot,
   type KartState,
   type MapData,
@@ -165,11 +167,13 @@ export class NetRace {
       boostLeft: s.boostLeft,
       lap: s.lap,
       cp: s.checkpoint,
+      missed: s.missed,
       finished: s.lap >= this.opts.laps,
       fallLeft: s.fallLeft,
       spawnLeft: s.spawnLeft,
     };
-    for (const i of this.pending) k = stepKart(k, i.bits, this.opts.map, this.opts.laps).kart;
+    const others = this.others();
+    for (const i of this.pending) k = this.collide(stepKart(k, i.bits, this.opts.map, this.opts.laps).kart, others);
 
     const dx = this.pred.x - k.x, dy = this.pred.y - k.y, da = wrapAngle(this.pred.angle - k.angle);
     if (Math.hypot(dx, dy) > CORRECTION_SNAP) {
@@ -194,7 +198,25 @@ export class NetRace {
       this.pending.push({ seq: this.seq, bits });
     }
     this.prevPred = this.pred;
-    this.pred = stepKart(this.pred, bits, this.opts.map, this.opts.laps).kart;
+    this.pred = this.collide(stepKart(this.pred, bits, this.opts.map, this.opts.laps).kart, this.others());
+  }
+
+  // 화면에 보이는 다른 카트 위치이며, 서버와 같은 기준으로 충돌하지 않는 카트는 뺀다.
+  private others(): KartBody[] {
+    const at = serverNow() - INTERP_DELAY_MS;
+    return this.players
+      .filter((p) => p.id !== this.opts.meId)
+      .map((p) => this.sample(p, at))
+      .filter((k) => !k.ghost && k.fallLeft === 0 && k.spawnLeft === 0)
+      .map((k) => ({ x: k.x, y: k.y, angle: k.angle, vx: k.vx, vy: k.vy, sinceHit: 0 }));
+  }
+
+  // 서버 응답을 기다리지 않고 부딪힌 즉시 내 카트만 밀어낸다. 서버 결과와의 차이는 reconcile이 흡수한다.
+  private collide(k: KartState, others: KartBody[]): KartState {
+    if (k.fallLeft > 0 || k.spawnLeft > 0) return k;
+    const me = { ...k };
+    for (const o of others) collideKarts(me, o);
+    return me;
   }
 
   private frame() {
@@ -249,14 +271,16 @@ export class NetRace {
   }
 
   // renderAt을 사이에 두는 두 스냅샷을 보간한다. 다음 스냅샷이 없으면 마지막 속도로 잠시 외삽한다.
-  private sample(p: PlayerInfo, renderAt: number): ViewKart {
+  // 내 카트는 현재 시점으로 그리므로, 같은 시점에서 부딪혀 보이도록 보간 지연만큼 속도로 앞당긴다.
+  private sample(p: PlayerInfo, renderAt: number): ViewKart & { vx: number; vy: number } {
     const base = { id: p.id, color: p.color, label: p.nickname };
     const frames = this.frames.filter((f) => f.karts.has(p.id));
     if (frames.length === 0) {
       const k = createKart(this.opts.map.grid[p.gridSlot]);
-      return { ...base, x: k.x, y: k.y, angle: k.angle, drifting: false, driftSlip: 0, boostLeft: 0, speed: 0, ghost: !p.connected, fallLeft: 0, spawnLeft: 0 };
+      return { ...base, x: k.x, y: k.y, angle: k.angle, vx: 0, vy: 0, drifting: false, driftSlip: 0, boostLeft: 0, speed: 0, ghost: !p.connected, fallLeft: 0, spawnLeft: 0 };
     }
 
+    const lead = INTERP_DELAY_MS / 1000;
     let i = frames.length - 1;
     while (i > 0 && frames[i].t > renderAt) i--;
     const a = frames[i].karts.get(p.id)!;
@@ -264,11 +288,14 @@ export class NetRace {
     if (next && frames[i].t <= renderAt) {
       const b = next.karts.get(p.id)!;
       const u = (renderAt - frames[i].t) / (next.t - frames[i].t);
+      const vx = a.vx + (b.vx - a.vx) * u, vy = a.vy + (b.vy - a.vy) * u;
       return {
         ...base,
-        x: a.x + (b.x - a.x) * u,
-        y: a.y + (b.y - a.y) * u,
+        x: a.x + (b.x - a.x) * u + vx * lead,
+        y: a.y + (b.y - a.y) * u + vy * lead,
         angle: a.angle + wrapAngle(b.angle - a.angle) * u,
+        vx,
+        vy,
         drifting: b.drifting,
         driftSlip: b.driftSlip,
         boostLeft: b.boostLeft,
@@ -278,12 +305,14 @@ export class NetRace {
         spawnLeft: b.spawnLeft,
       };
     }
-    const ahead = Math.min(Math.max(renderAt - frames[i].t, 0), EXTRAPOLATE_MAX_MS) / 1000;
+    const ahead = Math.min(Math.max(renderAt - frames[i].t, 0), EXTRAPOLATE_MAX_MS) / 1000 + lead;
     return {
       ...base,
       x: a.x + a.vx * ahead,
       y: a.y + a.vy * ahead,
       angle: a.angle,
+      vx: a.vx,
+      vy: a.vy,
       drifting: a.drifting,
       driftSlip: a.driftSlip,
       boostLeft: a.boostLeft,

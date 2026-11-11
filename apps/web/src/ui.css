@@ -648,6 +648,12 @@ button.badge {
   transform: translateY(3px) scale(0.94);
 }
 
+.touch-btn.left,
+.touch-btn.right {
+  width: min(100px, 25cqh);
+  height: min(100px, 25cqh);
+}
+
 .touch-btn.brake {
   --on: #ff6b5b;
 }

@@ -18,7 +18,8 @@ export interface CurvedMapSpec {
 }
 
 const STEP = 0.5;
-const CP_MARGIN = 2.5; // 체크포인트 선이 트랙 밖으로 나가는 길이이며, 코너 안쪽을 깊게 파고들어도 선을 지나게 한다.
+const CP_MARGIN = 2.5; // 체크포인트 선이 트랙 밖으로 나가는 최소 길이이며, 코너 안쪽을 깊게 파고들어도 선을 지나게 한다.
+const CP_REACH = 8; // 풀숲으로 벗어나 달려도 통과로 치도록 선을 늘리는 최대 길이이다.
 
 // 꼭짓점 경로를 둥근 모서리 곡선 트랙으로 바꾼다. 같은 입력이면 서버와 클라이언트가 같은 맵을 만든다.
 // 갈래길과 지름길 양 끝 사이의 본선 체크포인트는 optional이 된다.
@@ -42,13 +43,33 @@ export function curvedMap(spec: CurvedMapSpec): Pick<MapData, 'width' | 'height'
     return { line: bridgeLine(line[i0], line[i1], line[Math.floor((i0 + i1) / 2)], b.bulge), halfWidth: b.halfWidth ?? hw };
   });
 
+  // 선은 다른 도로 구간과의 틈 절반에서 멈춘다. 중점이 중심선에 남아야 복귀·진행률이 맞으므로 양쪽 길이를 같게 둔다.
+  // 도로 중심선 점마다 반폭 원을 두고, 선 방향으로 처음 닿는 거리를 그 도로의 가장자리로 본다. 본선 점은 호 길이로 가까운 자기 구간을 뺀다.
+  const roads = [
+    ...line.map((q, j) => ({ q, r: hw, s: cum[j] })),
+    ...lanes.flatMap((l) => dense(l.line).map((q) => ({ q, r: hw, s: -1 }))),
+    ...bridges.flatMap((b) => b.line.map((q) => ({ q, r: b.halfWidth, s: -1 }))),
+  ];
+  const reach = (p: Vec, s: number, nx: number, ny: number) => {
+    let edge = hw + 2 * CP_REACH;
+    for (const { q, r, s: qs } of roads) {
+      const dx = q.x - p.x, dy = q.y - p.y, t = dx * nx + dy * ny, e = Math.abs(dx * ny - dy * nx);
+      if (t <= 0 || e > r) continue;
+      const d = t - Math.sqrt(r * r - e * e), ds = Math.abs(qs - s);
+      if (qs >= 0 && (d < hw || Math.min(ds, total - ds) <= 2 * d)) continue;
+      edge = Math.min(edge, d);
+    }
+    return (edge - hw) / 2;
+  };
+
   const checkpoints: Checkpoint[] = [];
   const n = Math.round(total / (spec.cpStep ?? 5));
   for (let c = 0; c < n; c++) {
     const s = (total * c) / n;
     let i = cum.findIndex((v) => v >= s);
     if (i < 0) i = line.length - 1;
-    const p = line[i], [tx, ty] = tangent(line, i), k = hw + CP_MARGIN;
+    const p = line[i], [tx, ty] = tangent(line, i);
+    const k = hw + Math.min(CP_REACH, Math.max(CP_MARGIN, Math.min(reach(p, cum[i], -ty, tx), reach(p, cum[i], ty, -tx))));
     const cp: Checkpoint = { a: { x: p.x - ty * k, y: p.y + tx * k }, b: { x: p.x + ty * k, y: p.y - tx * k } };
     if (c > 0 && skips.some(([s0, s1]) => s > s0 && s < s1)) cp.optional = true;
     checkpoints.push(cp);
@@ -79,6 +100,15 @@ export function curvedMap(spec: CurvedMapSpec): Pick<MapData, 'width' | 'height'
 
 const dist = (a: Vec, b: Vec) => Math.hypot(b.x - a.x, b.y - a.y);
 const toVec = ([x, y]: Point): Vec => ({ x, y });
+
+function dense(line: Vec[]): Vec[] {
+  return line.flatMap((a, i) => {
+    const b = line[i + 1];
+    if (!b) return [a];
+    const m = Math.ceil(dist(a, b) / STEP);
+    return [...Array(m).keys()].map((k) => ({ x: a.x + ((b.x - a.x) * k) / m, y: a.y + ((b.y - a.y) * k) / m }));
+  });
+}
 
 function nearestIndex(line: Vec[], [x, y]: Point): number {
   let best = 0;
