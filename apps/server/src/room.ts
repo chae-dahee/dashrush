@@ -445,8 +445,8 @@ export class Room {
       if (passed === 0 && kart.lap > prev.lap) this.onLap(r, (this.tick - 1 + crossFrac) * TICK_MS);
     }
 
-    // 완주한 카트, 끊긴 카트, 바다에 빠졌거나 막 복귀한 카트는 충돌에서 뺀다.
-    const colliding = active.filter((r) => !r.kart.finished && !r.ghost && r.kart.fallLeft === 0 && r.kart.spawnLeft === 0);
+    // 끊긴 카트, 바다에 빠졌거나 막 복귀한 카트는 충돌에서 뺀다. 완주한 카트는 포함한다.
+    const colliding = active.filter((r) => !r.ghost && r.kart.fallLeft === 0 && r.kart.spawnLeft === 0);
     for (let i = 0; i < colliding.length; i++) {
       for (let j = i + 1; j < colliding.length; j++) collideKarts(colliding[i].kart, colliding[j].kart);
     }
@@ -473,8 +473,9 @@ export class Room {
         spawnLeft: r2(r.kart.spawnLeft),
         lap: r.kart.lap,
         checkpoint: r.kart.cp,
+        missed: r.kart.missed,
         rank: i + 1,
-        ghost: r.ghost || r.kart.finished,
+        ghost: r.ghost,
         lastSeq: r.appliedSeq,
       }));
     const snapshot = { tick: this.tick, serverTime: Date.now(), karts };

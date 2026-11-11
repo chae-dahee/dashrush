@@ -54,6 +54,8 @@ export const FALL_SEC = 1.5;
 export const FALL_DRAG = 0.8; // 바다로 떨어지는 동안의 공기 저항(초당 감쇠율)
 export const OFFROAD_RESPAWN_SEC = 3;
 export const SPAWN_GHOST_SEC = 1.5;
+export const CP_MISS_RATIO = 0.1; // 바퀴마다 필수 체크포인트를 이 비율까지 놓쳐도 랩으로 친다.
+export const CP_SKIP_MAX = 3; // 한 번에 건너뛸 수 있는 필수 체크포인트 수이며, 반대편 도로로 구간을 통째로 건너뛰는 것을 막는다.
 
 export const MAX_PLAYERS = 8;
 export const LAPS_MIN = 1;
@@ -72,6 +74,9 @@ export const EXTRAPOLATE_MAX_MS = 100;
 export const KART_COLORS = [0xff6f91, 0x3d7bff, 0xffc83d, 0x6a3fb5, 0x4fd18b, 0xe8452c, 0x7fe3ff, 0x2b6b4a];
 
 export const KART_BOUNCE = 0.5; // 카트끼리 부딪힐 때 반발 계수
+// 카트끼리는 진행 방향 선분을 감싼 캡슐로 판정하며, 모형 크기(앞뒤 약 1.06, 폭 약 0.78)에 맞춘다.
+export const KART_HIT_RADIUS = 0.39;
+export const KART_HIT_HALF = 0.14; // 캡슐 중심 선분의 반길이
 export const FINISH_LIMIT_MS = 20000; // 첫 완주 뒤 나머지에게 주는 제한 시간
 export const EVENT_RATE_MAX = TICK_RATE * 2; // 소켓 하나가 1초에 보낼 수 있는 이벤트 수
 export const CORRECTION_SNAP = 3; // 예측 보정 차이가 이 거리(타일)를 넘으면 오프셋 없이 바로 맞춘다.

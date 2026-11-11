@@ -184,10 +184,13 @@ export function drawFloorCanvas(map: MapData, px: number, forScene = false): HTM
     }
   }
 
+  // 결승 체크포인트 선은 풀숲까지 길게 나가므로 도로 폭만큼만 그린다.
   const f = map.checkpoints[0];
-  const len = Math.hypot(f.b.x - f.a.x, f.b.y - f.a.y);
+  const full = Math.hypot(f.b.x - f.a.x, f.b.y - f.a.y);
+  const len = map.track ? Math.min(full, 2 * map.track.halfWidth) : full;
+  const skip = (full - len) / 2 / full;
   ctx.save();
-  ctx.translate(f.a.x * px, f.a.y * px);
+  ctx.translate((f.a.x + (f.b.x - f.a.x) * skip) * px, (f.a.y + (f.b.y - f.a.y) * skip) * px);
   ctx.rotate(Math.atan2(f.b.y - f.a.y, f.b.x - f.a.x) - Math.PI / 2);
   const cell = px / 4;
   for (let i = 0; i * cell < len * px; i++) {

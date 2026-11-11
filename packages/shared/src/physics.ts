@@ -5,6 +5,8 @@ import {
   BOOST_USE_COST,
   BOOST_USE_SEC,
   BRAKE,
+  CP_MISS_RATIO,
+  CP_SKIP_MAX,
   DRAG,
   DRIFT_END_BOOST_SEC,
   DRIFT_END_MIN_SEC,
@@ -21,6 +23,8 @@ import {
   GAUGE_MAX,
   GRIP,
   KART_BOUNCE,
+  KART_HIT_HALF,
+  KART_HIT_RADIUS,
   KART_RADIUS,
   MAX_SPEED,
   OFFROAD_RESPAWN_SEC,
@@ -48,6 +52,7 @@ import {
   surfaceAtPoint,
   type GridSlot,
   type MapData,
+  type Vec,
 } from './map.ts';
 import { segmentCross } from './track.ts';
 
@@ -69,6 +74,7 @@ export interface KartState {
   boostLeft: number;
   lap: number; // 완주한 랩 수
   cp: number; // 마지막으로 통과한 체크포인트. 출발 전에는 -1이다.
+  missed: number; // 이번 바퀴에 건너뛴 필수 체크포인트 수
   finished: boolean;
   fallLeft: number; // 바다에 빠진 뒤 복귀까지 남은 시간(초)
   spawnLeft: number; // 복귀 뒤 다른 카트와 부딪히지 않는 남은 시간(초)
@@ -97,6 +103,7 @@ export function createKart(slot: GridSlot): KartState {
     boostLeft: 0,
     lap: 0,
     cp: -1,
+    missed: 0,
     finished: false,
     fallLeft: 0,
     spawnLeft: 0,
@@ -233,12 +240,18 @@ export function stepKart(prev: KartState, bits: number, map: MapData, laps: numb
   let passed: number | null = null;
   let crossFrac = 0;
   if (!k.finished) {
-    const n = map.checkpoints.length;
+    // 결승선은 건너뛸 수 없고, 나머지 필수 체크포인트는 바퀴마다 CP_MISS_RATIO까지 건너뛸 수 있다.
+    const cps = map.checkpoints, n = cps.length;
+    const budget = Math.floor(cps.filter((c) => !c.optional).length * CP_MISS_RATIO);
+    let skipped = 0;
     for (let next = (k.cp + 1) % n; ; next = (next + 1) % n) {
-      const cp = map.checkpoints[next];
+      const cp = cps[next];
       const t = segmentCross(prev, k, cp.a, cp.b);
       if (t !== null) {
-        if (next === 0 && k.cp !== -1) k.lap += 1;
+        if (next === 0 && k.cp !== -1) {
+          k.lap += 1;
+          k.missed = 0;
+        } else k.missed += skipped;
         k.cp = next;
         passed = next;
         crossFrac = t;
@@ -251,18 +264,23 @@ export function stepKart(prev: KartState, bits: number, map: MapData, laps: numb
         }
         break;
       }
-      if (!cp.optional) break;
+      if (next === 0) break;
+      if (!cp.optional && ++skipped > Math.min(CP_SKIP_MAX, budget - k.missed)) break;
     }
   }
 
   return { kart: k, passed, crossFrac };
 }
 
-// 두 카트를 원으로 보고 겹친 만큼 절반씩 밀어내며, 서로 다가오는 속도에 반발 계수를 적용한다. 서버만 쓴다.
-export function collideKarts(a: KartState, b: KartState) {
-  let dx = b.x - a.x, dy = b.y - a.y;
+export type KartBody = Pick<KartState, 'x' | 'y' | 'angle' | 'vx' | 'vy' | 'sinceHit'>;
+
+// 두 카트를 캡슐로 보고 중심 선분끼리 가장 가까운 점 사이로 겹친 만큼 절반씩 밀어내며, 서로 다가오는 속도에 반발 계수를 적용한다.
+// 원으로 보면 비스듬히 받았을 때 모형이 겹친 채 옆으로 미끄러져 지나간다.
+export function collideKarts(a: KartBody, b: KartBody) {
+  const [p, q] = closestOnAxes(a, b);
+  let dx = q.x - p.x, dy = q.y - p.y;
   let d = Math.hypot(dx, dy);
-  const overlap = 2 * KART_RADIUS - d;
+  const overlap = 2 * KART_HIT_RADIUS - d;
   if (overlap <= 0) return;
   a.sinceHit = b.sinceHit = 0;
   if (d === 0) {
@@ -282,6 +300,31 @@ export function collideKarts(a: KartState, b: KartState) {
   a.vy += j * ny;
   b.vx -= j * nx;
   b.vy -= j * ny;
+}
+
+// 두 카트 중심 선분 위에서 서로 가장 가까운 두 점이다(Ericson, Real-Time Collision Detection 5.1.9).
+function closestOnAxes(a: KartBody, b: KartBody): [Vec, Vec] {
+  const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+  const ax = Math.cos(a.angle) * KART_HIT_HALF, ay = Math.sin(a.angle) * KART_HIT_HALF;
+  const bx = Math.cos(b.angle) * KART_HIT_HALF, by = Math.sin(b.angle) * KART_HIT_HALF;
+  const p1 = { x: a.x - ax, y: a.y - ay }, p2 = { x: b.x - bx, y: b.y - by };
+  const d1 = { x: 2 * ax, y: 2 * ay }, d2 = { x: 2 * bx, y: 2 * by };
+  const rx = p1.x - p2.x, ry = p1.y - p2.y;
+  const aa = d1.x * d1.x + d1.y * d1.y, e = d2.x * d2.x + d2.y * d2.y, f = d2.x * rx + d2.y * ry;
+  const c = d1.x * rx + d1.y * ry, bb = d1.x * d2.x + d1.y * d2.y, den = aa * e - bb * bb;
+  let s = den > 1e-9 ? clamp01((bb * f - c * e) / den) : 0;
+  let t = (bb * s + f) / e;
+  if (t < 0) {
+    t = 0;
+    s = clamp01(-c / aa);
+  } else if (t > 1) {
+    t = 1;
+    s = clamp01((bb - c) / aa);
+  }
+  return [
+    { x: p1.x + d1.x * s, y: p1.y + d1.y * s },
+    { x: p2.x + d2.x * t, y: p2.y + d2.y * t },
+  ];
 }
 
 interface WallContact {
